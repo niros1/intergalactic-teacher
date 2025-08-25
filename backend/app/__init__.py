@@ -1,0 +1,1 @@
+"""Intergalactic Teacher Backend Application."""

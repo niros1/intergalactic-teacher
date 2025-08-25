@@ -1,0 +1,491 @@
+"""Stories management endpoints."""
+
+import logging
+from typing import Any, List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
+
+from app.core.dependencies import get_db, get_current_active_user
+from app.models.user import User
+from app.schemas.story import (
+    StoryCreate,
+    StoryResponse,
+    StoryWithChoices,
+    StoryGenerationRequest,
+    StoryGenerationResponse,
+    ChoiceSelectionRequest,
+    StoryRecommendation,
+    ContentSafetyCheck
+)
+from app.schemas.story_session import (
+    StorySessionCreate,
+    StorySessionResponse,
+    StorySessionUpdate,
+    ReadingProgress
+)
+from app.services.child_service import ChildService
+from app.services.story_service import StoryService
+from app.services.story_session_service import StorySessionService
+from app.utils.redis_client import redis_client
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
+
+
+@router.get("/", response_model=List[StoryResponse])
+async def get_stories(
+    child_id: Optional[int] = Query(None, description="Filter stories for specific child"),
+    theme: Optional[str] = Query(None, description="Filter by story theme"),
+    difficulty: Optional[str] = Query(None, description="Filter by difficulty level"),
+    language: Optional[str] = Query(None, description="Filter by language"),
+    limit: int = Query(20, description="Maximum number of stories to return"),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> Any:
+    """Get stories, optionally filtered for a specific child."""
+    try:
+        story_service = StoryService(db)
+        child_service = ChildService(db)
+        
+        if child_id:
+            # Verify child belongs to current user
+            if not child_service.check_child_access(child_id, current_user.id):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied to this child profile"
+                )
+            
+            child = child_service.get_child_by_id(child_id)
+            if not child:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Child not found"
+                )
+            
+            stories = story_service.get_stories_for_child(child, limit, theme)
+        else:
+            # Get general stories (could be enhanced with user preferences)
+            stories = story_service.get_published_stories(
+                language=language,
+                theme=theme,
+                difficulty=difficulty,
+                limit=limit
+            )
+        
+        logger.info(f"Retrieved {len(stories)} stories for user: {current_user.id}")
+        return stories
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting stories: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve stories"
+        )
+
+
+@router.get("/recommendations/{child_id}", response_model=StoryRecommendation)
+async def get_story_recommendations(
+    child_id: int,
+    limit: int = Query(10, description="Number of recommendations"),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> Any:
+    """Get personalized story recommendations for a child."""
+    try:
+        story_service = StoryService(db)
+        child_service = ChildService(db)
+        
+        # Check access
+        if not child_service.check_child_access(child_id, current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to this child profile"
+            )
+        
+        child = child_service.get_child_by_id(child_id)
+        if not child:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Child not found"
+            )
+        
+        # Check cache first
+        cache_key = f"recommendations:{child_id}:{limit}"
+        cached_recommendations = await redis_client.get(cache_key)
+        if cached_recommendations:
+            logger.info(f"Returning cached recommendations for child: {child_id}")
+            return cached_recommendations
+        
+        # Get recommendations
+        recommended_stories = story_service.get_recommended_stories(child, limit)
+        
+        recommendation_data = StoryRecommendation(
+            stories=recommended_stories,
+            recommendation_reason=f"Based on {child.name}'s interests and reading level",
+            personalized=True
+        )
+        
+        # Cache recommendations for 30 minutes
+        await redis_client.set(cache_key, recommendation_data.dict(), expire=1800)
+        
+        logger.info(f"Generated {len(recommended_stories)} recommendations for child: {child_id}")
+        return recommendation_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting recommendations for child {child_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get story recommendations"
+        )
+
+
+@router.post("/generate", response_model=StoryGenerationResponse)
+async def generate_story(
+    generation_request: StoryGenerationRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> Any:
+    """Generate a new personalized story for a child."""
+    try:
+        story_service = StoryService(db)
+        child_service = ChildService(db)
+        
+        # Check access
+        if not child_service.check_child_access(generation_request.child_id, current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to this child profile"
+            )
+        
+        child = child_service.get_child_by_id(generation_request.child_id)
+        if not child:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Child not found"
+            )
+        
+        # Check rate limiting for story generation
+        is_allowed, remaining = await redis_client.rate_limit_check(
+            f"story_generation:{current_user.id}",
+            limit=10,  # 10 generations per hour
+            window=3600
+        )
+        
+        if not is_allowed:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Story generation rate limit exceeded. Try again later."
+            )
+        
+        # Generate the story
+        result = story_service.generate_personalized_story(
+            child=child,
+            theme=generation_request.theme,
+            chapter_number=generation_request.chapter_number
+        )
+        
+        if not result["success"]:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=result.get("error", "Story generation failed")
+            )
+        
+        logger.info(f"Generated story for child: {generation_request.child_id}, theme: {generation_request.theme}")
+        return StoryGenerationResponse(**result)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating story: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate story"
+        )
+
+
+@router.post("/create-with-ai", response_model=StoryResponse)
+async def create_story_with_ai(
+    story_create: StoryCreate,
+    child_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> Any:
+    """Create and save a new AI-generated story."""
+    try:
+        story_service = StoryService(db)
+        child_service = ChildService(db)
+        
+        # Check access
+        if not child_service.check_child_access(child_id, current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to this child profile"
+            )
+        
+        child = child_service.get_child_by_id(child_id)
+        if not child:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Child not found"
+            )
+        
+        # Create the story
+        story = story_service.create_story_with_ai(
+            child=child,
+            theme=story_create.theme,
+            title=story_create.title or f"A {story_create.theme.title()} Adventure",
+            total_chapters=story_create.total_chapters
+        )
+        
+        if not story:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create story"
+            )
+        
+        logger.info(f"Created AI story: {story.id} for child: {child_id}")
+        return story
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating AI story: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create story"
+        )
+
+
+@router.get("/{story_id}", response_model=StoryWithChoices)
+async def get_story(
+    story_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> Any:
+    """Get a specific story with its choices."""
+    try:
+        story_service = StoryService(db)
+        
+        story = story_service.get_story_by_id(story_id)
+        if not story:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Story not found"
+            )
+        
+        if not story.is_published:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Story is not published"
+            )
+        
+        logger.info(f"Retrieved story: {story_id} for user: {current_user.id}")
+        return story
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting story {story_id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve story"
+        )
+
+
+@router.post("/{story_id}/check-safety", response_model=ContentSafetyCheck)
+async def check_story_safety(
+    story_id: int,
+    child_age: int = Query(..., description="Age of the child reading the story"),
+    language: str = Query("english", description="Language of the content"),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> Any:
+    """Check the safety of a story for a specific child age."""
+    try:
+        story_service = StoryService(db)
+        
+        story = story_service.get_story_by_id(story_id)
+        if not story:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Story not found"
+            )
+        
+        # Run safety check
+        safety_result = story_service.check_story_safety(
+            story.content,
+            child_age,
+            language
+        )
+        
+        logger.info(f"Safety check completed for story: {story_id}, age: {child_age}")
+        return ContentSafetyCheck(**safety_result)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error checking story safety: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to check story safety"
+        )
+
+
+# Story Session endpoints
+@router.post("/{story_id}/sessions", response_model=StorySessionResponse)
+async def start_story_session(
+    story_id: int,
+    session_create: StorySessionCreate,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> Any:
+    """Start a new story reading session."""
+    try:
+        story_service = StoryService(db)
+        child_service = ChildService(db)
+        session_service = StorySessionService(db)
+        
+        # Check child access
+        if not child_service.check_child_access(session_create.child_id, current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to this child profile"
+            )
+        
+        # Check story exists
+        story = story_service.get_story_by_id(story_id)
+        if not story or not story.is_published:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Story not found or not published"
+            )
+        
+        # Create or resume session
+        session = session_service.start_story_session(
+            child_id=session_create.child_id,
+            story_id=story_id
+        )
+        
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to start story session"
+            )
+        
+        logger.info(f"Started story session: {session.id} for child: {session_create.child_id}")
+        return session
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error starting story session: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to start story session"
+        )
+
+
+@router.put("/sessions/{session_id}/progress")
+async def update_reading_progress(
+    session_id: int,
+    progress: ReadingProgress,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> Any:
+    """Update reading progress for a story session."""
+    try:
+        session_service = StorySessionService(db)
+        child_service = ChildService(db)
+        
+        # Get session and verify access
+        session = session_service.get_session_by_id(session_id)
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Story session not found"
+            )
+        
+        if not child_service.check_child_access(session.child_id, current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to this story session"
+            )
+        
+        # Update progress
+        updated_session = session_service.update_reading_progress(session_id, progress)
+        
+        if not updated_session:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to update reading progress"
+            )
+        
+        return {"message": "Reading progress updated successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating reading progress: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update reading progress"
+        )
+
+
+@router.post("/sessions/{session_id}/choices")
+async def make_story_choice(
+    session_id: int,
+    choice_request: ChoiceSelectionRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> Any:
+    """Make a choice in a story session."""
+    try:
+        session_service = StorySessionService(db)
+        child_service = ChildService(db)
+        story_service = StoryService(db)
+        
+        # Get session and verify access
+        session = session_service.get_session_by_id(session_id)
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Story session not found"
+            )
+        
+        if not child_service.check_child_access(session.child_id, current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to this story session"
+            )
+        
+        # Process the choice
+        result = session_service.make_story_choice(
+            session_id,
+            choice_request.choice_id,
+            choice_request.option_index
+        )
+        
+        if not result["success"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result.get("error", "Failed to process choice")
+            )
+        
+        logger.info(f"Choice made in session: {session_id}, choice: {choice_request.choice_id}")
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error making story choice: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to make story choice"
+        )
