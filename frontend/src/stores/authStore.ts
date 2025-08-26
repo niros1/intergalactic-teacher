@@ -178,6 +178,22 @@ export const useAuthStore = create<AuthStore>((set) => ({
 if (authService.isAuthenticated()) {
   // Use initializeAuth to validate tokens and get fresh user data
   useAuthStore.getState().initializeAuth()
+} else if (import.meta.env.DEV) {
+  // Auto-login in development mode
+  const demoUser = {
+    id: '1',
+    email: 'demo@example.com',
+    name: 'Demo Parent',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  }
+  useAuthStore.setState({ 
+    user: demoUser, 
+    isAuthenticated: true, 
+    isLoading: false,
+    error: null
+  })
+  localStorage.setItem('user', JSON.stringify(demoUser))
 } else {
   // Clear any stale data
   localStorage.removeItem('user')

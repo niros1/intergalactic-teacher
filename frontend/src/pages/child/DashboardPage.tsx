@@ -131,8 +131,7 @@ const DashboardPage: React.FC = () => {
               : 'Choose a New Story'}
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {storyThemes
-              .filter(theme => currentChild.interests.includes(theme.id))
+            {(currentChild ? storyThemes.filter(theme => currentChild.interests?.includes(theme.id)) : storyThemes)
               .map(theme => (
                 <button
                   key={theme.id}
