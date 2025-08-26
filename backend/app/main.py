@@ -78,13 +78,22 @@ from app.core.middleware import (
     RateLimitMiddleware,
     SecurityHeadersMiddleware,
     RequestValidationMiddleware,
-    LoggingMiddleware,
-    CORSHeadersMiddleware
+    LoggingMiddleware
 )
 
-# Add middleware in reverse order (they execute in reverse order of addition)
+# Add FastAPI CORS middleware first (handles preflight)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:5173", "http://localhost:5174", "http://localhost:8080"] + [str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "User-Agent", "X-Requested-With", "X-Request-ID"],
+)
+
+# Add custom middleware in reverse order (they execute in reverse order of addition)
 app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(CORSHeadersMiddleware)
+# Remove custom CORS middleware since we use FastAPI's built-in
+# app.add_middleware(CORSHeadersMiddleware) 
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(RequestValidationMiddleware)
 app.add_middleware(LoggingMiddleware)
@@ -169,5 +178,3 @@ async def root():
     }
 
 
-# Import time for middleware
-import time

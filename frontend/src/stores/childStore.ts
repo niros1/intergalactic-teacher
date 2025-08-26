@@ -1,11 +1,18 @@
 import { create } from 'zustand'
-import { type ChildState, type Child, type CreateChildRequest } from '../types'
+import { type ChildState, type Child, type CreateChildRequest, type UpdateChildRequest, type ChildWithProgress, type DashboardData, type ReadingAssessmentRequest, type ReadingAssessmentResult } from '../types'
+import childService from '../services/childService'
+import { getErrorMessage } from '../services/api'
 
 interface ChildStore extends ChildState {
   setCurrentChild: (child: Child | null) => void
-  addChild: (childData: CreateChildRequest) => Promise<void>
-  updateChild: (childId: string, updates: Partial<Child>) => Promise<void>
-  loadChildren: (parentId: string) => Promise<void>
+  addChild: (childData: CreateChildRequest) => Promise<Child>
+  updateChild: (childId: string, updates: UpdateChildRequest) => Promise<Child>
+  deleteChild: (childId: string) => Promise<void>
+  loadChildren: () => Promise<void>
+  getChildWithProgress: (childId: string) => Promise<ChildWithProgress>
+  getDashboard: (childId: string) => Promise<DashboardData>
+  conductAssessment: (childId: string, assessment: ReadingAssessmentRequest) => Promise<ReadingAssessmentResult>
+  uploadProfilePicture: (childId: string, file: File) => Promise<string>
   clearError: () => void
 }
 
@@ -24,24 +31,10 @@ export const useChildStore = create<ChildStore>((set) => ({
     }
   },
 
-  addChild: async (childData: CreateChildRequest) => {
+  addChild: async (childData: CreateChildRequest): Promise<Child> => {
     set({ isLoading: true, error: null })
     try {
-      // TODO: Replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      const newChild: Child = {
-        id: Date.now().toString(),
-        parentId: '1', // TODO: Get from auth store
-        name: childData.name,
-        age: childData.age,
-        readingLevel: 'beginner',
-        language: childData.language,
-        interests: childData.interests,
-        profilePicture: childData.profilePicture,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }
+      const newChild = await childService.createChild(childData)
       
       set(state => ({
         children: [...state.children, newChild],
@@ -50,57 +43,202 @@ export const useChildStore = create<ChildStore>((set) => ({
       }))
       
       localStorage.setItem('currentChild', JSON.stringify(newChild))
+      return newChild
     } catch (error) {
+      const errorMessage = getErrorMessage(error)
       set({
-        error: 'Failed to create child profile. Please try again.',
+        error: errorMessage,
         isLoading: false
       })
+      throw error
     }
   },
 
-  updateChild: async (childId: string, updates: Partial<Child>) => {
+  updateChild: async (childId: string, updates: UpdateChildRequest): Promise<Child> => {
     set({ isLoading: true, error: null })
     try {
-      // TODO: Replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 500))
+      const updatedChild = await childService.updateChild(childId, updates)
       
       set(state => ({
         children: state.children.map(child =>
-          child.id === childId
-            ? { ...child, ...updates, updatedAt: new Date().toISOString() }
-            : child
+          child.id === childId ? updatedChild : child
         ),
         currentChild: state.currentChild?.id === childId
-          ? { ...state.currentChild, ...updates, updatedAt: new Date().toISOString() }
+          ? updatedChild
           : state.currentChild,
         isLoading: false
       }))
+      
+      // Update localStorage if this is the current child
+      const state = useChildStore.getState()
+      if (state.currentChild?.id === childId) {
+        localStorage.setItem('currentChild', JSON.stringify(updatedChild))
+      }
+      
+      return updatedChild
     } catch (error) {
+      const errorMessage = getErrorMessage(error)
       set({
-        error: 'Failed to update child profile. Please try again.',
+        error: errorMessage,
         isLoading: false
       })
+      throw error
     }
   },
 
-  loadChildren: async (_parentId: string) => {
+  loadChildren: async () => {
     set({ isLoading: true, error: null })
     try {
-      // TODO: Replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      // Mock data for now
-      const mockChildren: Child[] = []
+      const children = await childService.getChildren()
       
       set({
-        children: mockChildren,
+        children,
         isLoading: false
       })
     } catch (error) {
+      const errorMessage = getErrorMessage(error)
       set({
-        error: 'Failed to load children profiles. Please try again.',
+        error: errorMessage,
         isLoading: false
       })
+      throw error
+    }
+  },
+
+  deleteChild: async (childId: string) => {
+    set({ isLoading: true, error: null })
+    try {
+      await childService.deleteChild(childId)
+      
+      set(state => {
+        const newChildren = state.children.filter(child => child.id !== childId)
+        const newCurrentChild = state.currentChild?.id === childId ? null : state.currentChild
+        
+        if (newCurrentChild === null) {
+          localStorage.removeItem('currentChild')
+        }
+        
+        return {
+          children: newChildren,
+          currentChild: newCurrentChild,
+          isLoading: false
+        }
+      })
+    } catch (error) {
+      const errorMessage = getErrorMessage(error)
+      set({
+        error: errorMessage,
+        isLoading: false
+      })
+      throw error
+    }
+  },
+
+  getChildWithProgress: async (childId: string): Promise<ChildWithProgress> => {
+    set({ isLoading: true, error: null })
+    try {
+      const childWithProgress = await childService.getChildWithProgress(childId)
+      set({ isLoading: false })
+      return childWithProgress
+    } catch (error) {
+      const errorMessage = getErrorMessage(error)
+      set({
+        error: errorMessage,
+        isLoading: false
+      })
+      throw error
+    }
+  },
+
+  getDashboard: async (childId: string): Promise<DashboardData> => {
+    set({ isLoading: true, error: null })
+    try {
+      const dashboardData = await childService.getChildDashboard(childId)
+      set({ isLoading: false })
+      return dashboardData
+    } catch (error) {
+      const errorMessage = getErrorMessage(error)
+      set({
+        error: errorMessage,
+        isLoading: false
+      })
+      throw error
+    }
+  },
+
+  conductAssessment: async (childId: string, assessment: ReadingAssessmentRequest): Promise<ReadingAssessmentResult> => {
+    set({ isLoading: true, error: null })
+    try {
+      const result = await childService.conductReadingAssessment(childId, assessment)
+      
+      // Update child's reading level if assessment provides it
+      if (result.readingLevel) {
+        set(state => ({
+          children: state.children.map(child =>
+            child.id === childId
+              ? { ...child, readingLevel: result.readingLevel }
+              : child
+          ),
+          currentChild: state.currentChild?.id === childId
+            ? { ...state.currentChild, readingLevel: result.readingLevel }
+            : state.currentChild,
+          isLoading: false
+        }))
+        
+        // Update localStorage if this is the current child
+        const state = useChildStore.getState()
+        if (state.currentChild?.id === childId) {
+          const updatedChild = { ...state.currentChild, readingLevel: result.readingLevel }
+          localStorage.setItem('currentChild', JSON.stringify(updatedChild))
+        }
+      } else {
+        set({ isLoading: false })
+      }
+      
+      return result
+    } catch (error) {
+      const errorMessage = getErrorMessage(error)
+      set({
+        error: errorMessage,
+        isLoading: false
+      })
+      throw error
+    }
+  },
+
+  uploadProfilePicture: async (childId: string, file: File): Promise<string> => {
+    set({ isLoading: true, error: null })
+    try {
+      const pictureUrl = await childService.uploadProfilePicture(childId, file)
+      
+      // Update child's profile picture
+      set(state => ({
+        children: state.children.map(child =>
+          child.id === childId
+            ? { ...child, profilePicture: pictureUrl }
+            : child
+        ),
+        currentChild: state.currentChild?.id === childId
+          ? { ...state.currentChild, profilePicture: pictureUrl }
+          : state.currentChild,
+        isLoading: false
+      }))
+      
+      // Update localStorage if this is the current child
+      const state = useChildStore.getState()
+      if (state.currentChild?.id === childId) {
+        const updatedChild = { ...state.currentChild, profilePicture: pictureUrl }
+        localStorage.setItem('currentChild', JSON.stringify(updatedChild))
+      }
+      
+      return pictureUrl
+    } catch (error) {
+      const errorMessage = getErrorMessage(error)
+      set({
+        error: errorMessage,
+        isLoading: false
+      })
+      throw error
     }
   },
 

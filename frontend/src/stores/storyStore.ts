@@ -1,12 +1,21 @@
 import { create } from 'zustand'
-import { type StoryState, type Story, type GenerateStoryRequest, type Choice } from '../types'
+import { type StoryState, type Story, type GenerateStoryRequest, type StoryFilters, type CreateSessionRequest, type UpdateProgressRequest, type MakeChoiceRequest, type StorySession } from '../types'
+import storyService from '../services/storyService'
+import { getErrorMessage } from '../services/api'
 
 interface StoryStore extends StoryState {
   setCurrentStory: (story: Story | null) => void
-  generateStory: (request: GenerateStoryRequest) => Promise<void>
-  loadStories: (childId: string) => Promise<void>
-  makeChoice: (choiceId: string, storyId: string) => Promise<void>
-  saveProgress: (storyId: string, currentPosition: number) => Promise<void>
+  generateStory: (request: GenerateStoryRequest) => Promise<Story>
+  loadStories: (filters?: StoryFilters) => Promise<void>
+  getStoryRecommendations: (childId: string, limit?: number) => Promise<Story[]>
+  startSession: (request: CreateSessionRequest) => Promise<{ session: StorySession; story: Story }>
+  updateProgress: (sessionId: string, progress: UpdateProgressRequest) => Promise<void>
+  makeChoice: (sessionId: string, choice: MakeChoiceRequest) => Promise<void>
+  completeSession: (sessionId: string) => Promise<{ achievements: string[]; points: number }>
+  bookmarkStory: (storyId: string) => Promise<void>
+  removeBookmark: (storyId: string) => Promise<void>
+  rateStory: (storyId: string, rating: number, review?: string) => Promise<void>
+  searchStories: (query: string, filters?: Partial<StoryFilters>) => Promise<Story[]>
   clearError: () => void
 }
 
@@ -26,53 +35,10 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
     }
   },
 
-  generateStory: async (request: GenerateStoryRequest) => {
+  generateStory: async (request: GenerateStoryRequest): Promise<Story> => {
     set({ isGenerating: true, error: null })
     try {
-      // TODO: Replace with actual AI API call
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      // Mock story generation
-      const mockChoices: Choice[] = [
-        {
-          id: 'choice-1',
-          text: request.language === 'hebrew' ? 'ללכת לחקור את היער' : 'Explore the forest',
-          impact: 'adventure',
-          nextChapter: 2
-        },
-        {
-          id: 'choice-2',
-          text: request.language === 'hebrew' ? 'לחזור הביתה' : 'Go back home',
-          impact: 'safety',
-          nextChapter: 3
-        }
-      ]
-
-      const newStory: Story = {
-        id: Date.now().toString(),
-        title: request.language === 'hebrew' 
-          ? 'הרפתקה בחווה הקסומה' 
-          : 'Adventure at the Magic Farm',
-        content: request.language === 'hebrew' 
-          ? [
-              'פעם היה ילד בשם דני שהלך לבקר את סבא וסבתא שלו בכפר. בבוקר אחד, הוא שמע קולות מוזרים מהחווה הסמוכה.',
-              'דני החליט ללכת ולחקור. כשהגיע לחווה, הוא ראה משהו מדהים - החיות דיברו ביניהן!',
-              'עכשיו דני צריך להחליט מה לעשות...'
-            ]
-          : [
-              'Once upon a time, there was a boy named Danny who went to visit his grandparents in the countryside. One morning, he heard strange sounds from the nearby farm.',
-              'Danny decided to investigate. When he reached the farm, he saw something amazing - the animals were talking to each other!',
-              'Now Danny needs to decide what to do...'
-            ],
-        language: request.language,
-        readingLevel: request.readingLevel,
-        theme: request.theme,
-        choices: mockChoices,
-        isCompleted: false,
-        currentChapter: 1,
-        totalChapters: 5,
-        createdAt: new Date().toISOString()
-      }
+      const newStory = await storyService.generateStory(request)
       
       set(state => ({
         currentStory: newStory,
@@ -81,83 +47,196 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
       }))
       
       localStorage.setItem('currentStory', JSON.stringify(newStory))
+      return newStory
     } catch (error) {
+      const errorMessage = getErrorMessage(error)
       set({
-        error: 'Failed to generate story. Please try again.',
+        error: errorMessage,
         isGenerating: false
       })
+      throw error
     }
   },
 
-  loadStories: async (_childId: string) => {
+  loadStories: async (filters?: StoryFilters) => {
     set({ isLoading: true, error: null })
     try {
-      // TODO: Replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      // Mock data for now
-      const mockStories: Story[] = []
+      const { stories } = await storyService.getStories(filters)
       
       set({
-        stories: mockStories,
+        stories,
         isLoading: false
       })
     } catch (error) {
+      const errorMessage = getErrorMessage(error)
       set({
-        error: 'Failed to load stories. Please try again.',
+        error: errorMessage,
         isLoading: false
       })
+      throw error
     }
   },
 
-  makeChoice: async (choiceId: string, storyId: string) => {
+  getStoryRecommendations: async (childId: string, limit?: number): Promise<Story[]> => {
     set({ isLoading: true, error: null })
     try {
-      // TODO: Replace with actual API call to continue story
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      const recommendations = await storyService.getStoryRecommendations(childId, limit)
+      set({ isLoading: false })
+      return recommendations
+    } catch (error) {
+      const errorMessage = getErrorMessage(error)
+      set({
+        error: errorMessage,
+        isLoading: false
+      })
+      throw error
+    }
+  },
+
+  startSession: async (request: CreateSessionRequest) => {
+    set({ isLoading: true, error: null })
+    try {
+      const sessionResponse = await storyService.startStorySession(request)
       
-      const { currentStory } = get()
-      if (!currentStory || currentStory.id !== storyId) return
-      
-      const choice = currentStory.choices.find(c => c.id === choiceId)
-      if (!choice) return
-      
-      // Mock story continuation
-      const updatedStory: Story = {
-        ...currentStory,
-        currentChapter: choice.nextChapter || currentStory.currentChapter + 1,
-        content: [
-          ...currentStory.content,
-          currentStory.language === 'hebrew' 
-            ? `דני בחר ${choice.text.toLowerCase()}. מה יקרה עכשיו?`
-            : `Danny chose to ${choice.text.toLowerCase()}. What happens next?`
-        ],
-        choices: [] // Will be populated with new choices
+      // Update current story if it's the one being started
+      if (sessionResponse.story) {
+        set({
+          currentStory: sessionResponse.story,
+          isLoading: false
+        })
+        localStorage.setItem('currentStory', JSON.stringify(sessionResponse.story))
+      } else {
+        set({ isLoading: false })
       }
       
-      set({
-        currentStory: updatedStory,
-        isLoading: false
-      })
-      
-      localStorage.setItem('currentStory', JSON.stringify(updatedStory))
+      return sessionResponse
     } catch (error) {
+      const errorMessage = getErrorMessage(error)
       set({
-        error: 'Failed to process choice. Please try again.',
+        error: errorMessage,
         isLoading: false
       })
+      throw error
     }
   },
 
-  saveProgress: async (storyId: string, currentPosition: number) => {
+  updateProgress: async (sessionId: string, progress: UpdateProgressRequest) => {
     try {
-      // TODO: Replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 200))
-      
-      // Mock progress saving - in reality this would save to backend
-      console.log(`Progress saved for story ${storyId} at position ${currentPosition}`)
+      await storyService.updateSessionProgress(sessionId, progress)
     } catch (error) {
-      console.error('Failed to save progress:', error)
+      const errorMessage = getErrorMessage(error)
+      set({ error: errorMessage })
+      throw error
+    }
+  },
+
+  makeChoice: async (sessionId: string, choice: MakeChoiceRequest) => {
+    set({ isLoading: true, error: null })
+    try {
+      const result = await storyService.makeStoryChoice(sessionId, choice)
+      
+      const { currentStory } = get()
+      if (currentStory) {
+        // Update story with new content and choices
+        const updatedStory: Story = {
+          ...currentStory,
+          content: [...currentStory.content, ...result.nextContent],
+          choices: result.newChoices,
+          isCompleted: result.isStoryComplete,
+          currentChapter: currentStory.currentChapter + 1
+        }
+        
+        set({
+          currentStory: updatedStory,
+          isLoading: false
+        })
+        
+        localStorage.setItem('currentStory', JSON.stringify(updatedStory))
+      } else {
+        set({ isLoading: false })
+      }
+    } catch (error) {
+      const errorMessage = getErrorMessage(error)
+      set({
+        error: errorMessage,
+        isLoading: false
+      })
+      throw error
+    }
+  },
+
+  completeSession: async (sessionId: string) => {
+    set({ isLoading: true, error: null })
+    try {
+      const result = await storyService.completeSession(sessionId)
+      
+      // Mark current story as completed if it matches
+      const { currentStory } = get()
+      if (currentStory) {
+        const completedStory = { ...currentStory, isCompleted: true }
+        set({
+          currentStory: completedStory,
+          isLoading: false
+        })
+        localStorage.setItem('currentStory', JSON.stringify(completedStory))
+      } else {
+        set({ isLoading: false })
+      }
+      
+      return result
+    } catch (error) {
+      const errorMessage = getErrorMessage(error)
+      set({
+        error: errorMessage,
+        isLoading: false
+      })
+      throw error
+    }
+  },
+
+  bookmarkStory: async (storyId: string) => {
+    try {
+      await storyService.bookmarkStory(storyId)
+    } catch (error) {
+      const errorMessage = getErrorMessage(error)
+      set({ error: errorMessage })
+      throw error
+    }
+  },
+
+  removeBookmark: async (storyId: string) => {
+    try {
+      await storyService.removeBookmark(storyId)
+    } catch (error) {
+      const errorMessage = getErrorMessage(error)
+      set({ error: errorMessage })
+      throw error
+    }
+  },
+
+  rateStory: async (storyId: string, rating: number, review?: string) => {
+    try {
+      await storyService.rateStory(storyId, rating, review)
+    } catch (error) {
+      const errorMessage = getErrorMessage(error)
+      set({ error: errorMessage })
+      throw error
+    }
+  },
+
+  searchStories: async (query: string, filters?: Partial<StoryFilters>): Promise<Story[]> => {
+    set({ isLoading: true, error: null })
+    try {
+      const { stories } = await storyService.searchStories(query, filters)
+      set({ isLoading: false })
+      return stories
+    } catch (error) {
+      const errorMessage = getErrorMessage(error)
+      set({
+        error: errorMessage,
+        isLoading: false
+      })
+      throw error
     }
   },
 

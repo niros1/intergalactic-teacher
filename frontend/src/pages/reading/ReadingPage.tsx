@@ -24,7 +24,10 @@ const ReadingPage: React.FC = () => {
 
   const handleChoice = async (choiceId: string) => {
     try {
-      await makeChoice(choiceId, currentStory.id)
+      await makeChoice('1', {
+        choiceId: choiceId,
+        timestamp: new Date().toISOString()
+      }) // Using session ID '1' as placeholder
       setCurrentParagraph(0) // Reset to beginning of new content
     } catch (error) {
       // Error is handled by the store

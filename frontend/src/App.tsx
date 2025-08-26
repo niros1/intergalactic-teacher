@@ -1,6 +1,13 @@
 // React import not needed with new JSX transform
+import { useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
+
+// Error components
+import { ErrorBoundary } from './components/error'
+
+// Test utilities (development only)
+import { runApiTests } from './utils/testApi'
 
 // Pages
 import LoginPage from './pages/auth/LoginPage'
@@ -14,10 +21,19 @@ import Layout from './components/layout/Layout'
 import AuthLayout from './components/layout/AuthLayout'
 
 function App() {
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated, initializeAuth } = useAuthStore()
+
+  useEffect(() => {
+    // Initialize auth state from localStorage
+    initializeAuth()
+    
+    // Run API tests in development
+    runApiTests()
+  }, [initializeAuth])
 
   return (
-    <Router>
+    <ErrorBoundary>
+      <Router>
       <Routes>
         {/* Public routes */}
         <Route path="/auth/login" element={
@@ -74,7 +90,8 @@ function App() {
           <Navigate to={isAuthenticated ? "/child/dashboard" : "/auth/login"} replace />
         } />
       </Routes>
-    </Router>
+      </Router>
+    </ErrorBoundary>
   )
 }
 
