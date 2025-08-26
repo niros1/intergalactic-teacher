@@ -5,7 +5,6 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import AnyHttpUrl, EmailStr, HttpUrl, field_validator
 from pydantic_settings import BaseSettings
-from pydantic import PostgresDsn
 
 
 class Settings(BaseSettings):
@@ -28,7 +27,7 @@ class Settings(BaseSettings):
     PASSWORD_MIN_LENGTH: int = 8
     
     # Database
-    DATABASE_URL: Optional[PostgresDsn] = None
+    DATABASE_URL: Optional[str] = None
     DATABASE_HOST: str = "localhost"
     DATABASE_PORT: int = 5432
     DATABASE_USER: str = "intergalactic"
@@ -41,8 +40,8 @@ class Settings(BaseSettings):
         """Assemble database URL from components."""
         if isinstance(v, str):
             return v
-        # For now, return a simple URL - can be enhanced with environment variables
-        return "postgresql://user:password@localhost:5432/intergalactic_teacher"
+        # Use SQLite for development to avoid PostgreSQL setup
+        return "sqlite:///./intergalactic_teacher.db"
     
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -82,7 +81,7 @@ class Settings(BaseSettings):
         raise ValueError(v)
     
     # Rate Limiting
-    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_ENABLED: bool = False
     RATE_LIMIT_REQUESTS_PER_MINUTE: int = 100
     
     # File Upload

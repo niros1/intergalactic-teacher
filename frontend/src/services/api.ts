@@ -4,6 +4,7 @@ import type { ApiResponse } from '../types'
 
 // Base API configuration
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
+console.log(`BASE_URL: ${BASE_URL}`);
 
 // Custom error class for API errors
 export class ApiResponseError extends Error {
@@ -45,7 +46,7 @@ class TokenManager {
 
   static isTokenExpired(token: string): boolean {
     if (!token) return true
-    
+
     try {
       const payload = JSON.parse(atob(token.split('.')[1]))
       const currentTime = Date.now() / 1000
@@ -99,17 +100,17 @@ const createApiInstance = (): AxiosInstance => {
       // Handle token refresh for 401 errors
       if (error.response?.status === 401 && !originalRequest._retry) {
         originalRequest._retry = true
-        
+
         const refreshToken = TokenManager.getRefreshToken()
         if (refreshToken && !TokenManager.isTokenExpired(refreshToken)) {
           try {
             const refreshResponse = await axios.post(`${BASE_URL}/auth/refresh`, {
               refreshToken,
             })
-            
+
             const { accessToken, refreshToken: newRefreshToken } = refreshResponse.data.data
             TokenManager.setTokens(accessToken, newRefreshToken)
-            
+
             // Retry the original request with the new token
             originalRequest.headers.Authorization = `Bearer ${accessToken}`
             return instance(originalRequest)
@@ -174,7 +175,7 @@ export const apiRequest = async <T>(
 ): Promise<T> => {
   try {
     const response = await requestFn()
-    
+
     // Handle successful response
     const responseData = response.data as any
     if (responseData && responseData.success !== false) {
@@ -213,7 +214,7 @@ export const getErrorMessage = (error: any): string => {
         return error.message
     }
   }
-  
+
   return 'אירעה שגיאה. אנא נסו שוב.'
 }
 

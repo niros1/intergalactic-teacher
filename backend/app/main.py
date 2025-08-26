@@ -75,7 +75,6 @@ app = FastAPI(
 
 # Add custom middleware
 from app.core.middleware import (
-    RateLimitMiddleware,
     SecurityHeadersMiddleware,
     RequestValidationMiddleware,
     LoggingMiddleware
@@ -94,7 +93,8 @@ app.add_middleware(
 app.add_middleware(SecurityHeadersMiddleware)
 # Remove custom CORS middleware since we use FastAPI's built-in
 # app.add_middleware(CORSHeadersMiddleware) 
-app.add_middleware(RateLimitMiddleware)
+# Rate limiting disabled for development
+# app.add_middleware(RateLimitMiddleware)
 app.add_middleware(RequestValidationMiddleware)
 app.add_middleware(LoggingMiddleware)
 

@@ -115,7 +115,7 @@ async def login(
             {
                 "user_id": user.id,
                 "email": user.email,
-                "full_name": user.full_name,
+                "name": user.name,
                 "last_login": user.last_login.isoformat() if user.last_login else None,
             }
         )
@@ -171,7 +171,7 @@ async def refresh_token(
             {
                 "user_id": user.id,
                 "email": user.email,
-                "full_name": user.full_name,
+                "name": user.name,
                 "last_login": datetime.utcnow().isoformat(),
             }
         )

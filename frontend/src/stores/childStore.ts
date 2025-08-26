@@ -260,18 +260,4 @@ if (storedChild) {
   } catch (error) {
     localStorage.removeItem('currentChild')
   }
-} else if (import.meta.env.DEV) {
-  // Create a demo child for development
-  const demoChild = {
-    id: '1',
-    parentId: '1',
-    name: 'Demo Child',
-    age: 8,
-    readingLevel: 'beginner' as const,
-    language: 'english' as const,
-    interests: ['animals', 'adventure', 'fantasy'],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }
-  useChildStore.getState().setCurrentChild(demoChild)
 }

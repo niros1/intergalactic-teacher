@@ -6,8 +6,6 @@ import { useAuthStore } from './stores/authStore'
 // Error components
 import { ErrorBoundary } from './components/error'
 
-// Test utilities (development only)
-import { runApiTests } from './utils/testApi'
 
 // Pages
 import LoginPage from './pages/auth/LoginPage'
@@ -26,9 +24,6 @@ function App() {
   useEffect(() => {
     // Initialize auth state from localStorage
     initializeAuth()
-    
-    // Run API tests in development
-    runApiTests()
   }, [initializeAuth])
 
   return (

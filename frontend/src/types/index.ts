@@ -138,6 +138,7 @@ export interface RefreshTokenRequest {
 export interface CreateChildRequest {
   name: string
   age: number
+  readingLevel: ReadingLevel
   language: Language
   interests: string[]
   profilePicture?: string

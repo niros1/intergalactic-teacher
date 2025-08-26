@@ -11,7 +11,7 @@ from app.core.config import settings
 class UserBase(BaseModel):
     """Base user schema."""
     email: EmailStr
-    full_name: str
+    name: str
 
 
 class UserCreate(UserBase):
@@ -37,7 +37,7 @@ class UserCreate(UserBase):
 class UserUpdate(BaseModel):
     """Schema for updating user information."""
     email: Optional[EmailStr] = None
-    full_name: Optional[str] = None
+    name: Optional[str] = None
     password: Optional[str] = None
     
     @validator('password')

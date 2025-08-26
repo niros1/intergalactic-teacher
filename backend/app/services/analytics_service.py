@@ -75,7 +75,7 @@ class AnalyticsService:
             recent_achievements = self._get_recent_achievements(user.children)
             
             return ParentDashboard(
-                parent_name=user.full_name,
+                parent_name=user.name,
                 children_summary=children_summaries,
                 total_family_reading_time=total_family_time,
                 total_stories_completed=total_family_stories,

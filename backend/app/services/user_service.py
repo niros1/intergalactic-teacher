@@ -42,7 +42,7 @@ class UserService:
         db_user = User(
             email=user_create.email,
             hashed_password=hashed_password,
-            full_name=user_create.full_name,
+            name=user_create.name,
             is_active=True,
             is_verified=False,
         )
@@ -76,8 +76,8 @@ class UserService:
             return None
         
         # Update fields if provided
-        if user_update.full_name is not None:
-            user.full_name = user_update.full_name
+        if user_update.name is not None:
+            user.name = user_update.name
         
         if user_update.email is not None:
             # Check if email is already taken
