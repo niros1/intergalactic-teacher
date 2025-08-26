@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, EmailStr, validator
+from pydantic import BaseModel, EmailStr, Field, validator
 
 from app.core.config import settings
 
@@ -96,8 +96,11 @@ class TokenResponse(BaseModel):
 class AuthResponse(BaseModel):
     """Schema for authentication response with user data."""
     user: UserResponse
-    access_token: str
-    refresh_token: str
+    access_token: str = Field(alias="accessToken")
+    refresh_token: str = Field(alias="refreshToken")
+    
+    class Config:
+        populate_by_name = True
 
 
 class RefreshTokenRequest(BaseModel):
