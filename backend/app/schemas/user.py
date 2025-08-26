@@ -68,7 +68,7 @@ class UserResponse(UserBase):
     last_login: Optional[datetime] = None
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class UserWithChildren(UserResponse):
@@ -76,7 +76,7 @@ class UserWithChildren(UserResponse):
     children: List['ChildResponse'] = []
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class LoginRequest(BaseModel):
@@ -91,6 +91,13 @@ class TokenResponse(BaseModel):
     refresh_token: str
     token_type: str
     expires_in: int
+
+
+class AuthResponse(BaseModel):
+    """Schema for authentication response with user data."""
+    user: UserResponse
+    access_token: str
+    refresh_token: str
 
 
 class RefreshTokenRequest(BaseModel):

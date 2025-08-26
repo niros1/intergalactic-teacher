@@ -8,9 +8,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.dependencies import get_db, get_refresh_token_user_id
 from app.core.security import (
-    create_token_response,
+    create_access_token,
+    create_refresh_token,
     get_password_hash,
     verify_password_reset_token,
     generate_password_reset_token
@@ -18,6 +20,7 @@ from app.core.security import (
 from app.schemas.user import (
     LoginRequest,
     TokenResponse,
+    AuthResponse,
     UserCreate,
     UserResponse,
     PasswordResetRequest,
@@ -33,7 +36,7 @@ security = HTTPBearer()
 router = APIRouter()
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 async def register(
     user_data: UserCreate,
     db: Session = Depends(get_db)
@@ -59,8 +62,41 @@ async def register(
         # Create the user
         user = user_service.create_user(user_data)
         
+        # Generate tokens for the new user
+        access_token = create_access_token(subject=str(user.id))
+        refresh_token = create_refresh_token(subject=str(user.id))
+        
+        # Store refresh token in Redis
+        await redis_client.set(
+            f"refresh_token:{user.id}",
+            refresh_token,
+            expire=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600
+        )
+        
+        # Cache user session
+        await redis_client.cache_user_session(
+            user.id,
+            {
+                "user_id": user.id,
+                "email": user.email,
+                "name": user.name,
+                "last_login": None,
+            }
+        )
+        
         logger.info(f"New user registered: {user.email}")
-        return user
+        
+        # Convert User model to UserResponse
+        user_response = UserResponse.model_validate(user)
+        
+        # Return AuthResponse with user data
+        auth_response = AuthResponse(
+            user=user_response,
+            access_token=access_token,
+            refresh_token=refresh_token
+        )
+        
+        return auth_response
         
     except ValueError as e:
         raise HTTPException(
@@ -75,7 +111,7 @@ async def register(
         )
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=AuthResponse)
 async def login(
     login_data: LoginRequest,
     db: Session = Depends(get_db)
@@ -87,7 +123,7 @@ async def login(
         # Check rate limiting
         is_allowed, remaining = await redis_client.rate_limit_check(
             f"login:{login_data.email}",
-            limit=10,  # 10 login attempts per hour
+            limit=200,  # 200 login attempts per hour
             window=3600
         )
         
@@ -107,7 +143,15 @@ async def login(
             )
         
         # Create tokens
-        tokens = create_token_response(user.id)
+        access_token = create_access_token(subject=str(user.id))
+        refresh_token = create_refresh_token(subject=str(user.id))
+        
+        # Store refresh token in Redis
+        await redis_client.set(
+            f"refresh_token:{user.id}",
+            refresh_token,
+            expire=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600
+        )
         
         # Cache user session
         await redis_client.cache_user_session(
@@ -121,7 +165,18 @@ async def login(
         )
         
         logger.info(f"User logged in: {user.email}")
-        return tokens
+        
+        # Convert User model to UserResponse
+        user_response = UserResponse.model_validate(user)
+        
+        # Return AuthResponse with user data
+        auth_response = AuthResponse(
+            user=user_response,
+            access_token=access_token,
+            refresh_token=refresh_token
+        )
+        
+        return auth_response
         
     except HTTPException:
         raise
