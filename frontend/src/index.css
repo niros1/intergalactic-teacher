@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Child-friendly base styles */
+@layer base {
+  html {
+    font-family: 'Comic Sans MS', cursive, system-ui, sans-serif;
+    font-size: 18px;
+    line-height: 1.6;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #e0f2fe 0%, #f0f9ff 100%);
+    color: #1e293b;
+  }
+
+  /* Hebrew text support */
+  [dir="rtl"] {
+    font-family: Arial, Hebrew, sans-serif;
+  }
+}
+
+/* Child-friendly component styles */
+@layer components {
+  .btn-primary {
+    @apply bg-sky-500 hover:bg-sky-600 text-white font-bold py-3 px-6 rounded-2xl shadow-lg transition-all duration-200 transform hover:scale-105;
+  }
+
+  .btn-secondary {
+    @apply bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 px-6 rounded-2xl shadow-lg transition-all duration-200 transform hover:scale-105;
+  }
+
+  .btn-success {
+    @apply bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-2xl shadow-lg transition-all duration-200 transform hover:scale-105;
+  }
+
+  .card-child {
+    @apply bg-white rounded-2xl shadow-xl p-6 border-2 border-transparent hover:border-sky-200 transition-all duration-200;
+  }
+
+  .text-child {
+    @apply text-xl leading-relaxed;
+  }
+
+  .text-child-sm {
+    @apply text-lg leading-relaxed;
+  }
+
+  .text-child-base {
+    @apply text-xl leading-relaxed;
+  }
+
+  .text-child-lg {
+    @apply text-2xl leading-relaxed;
+  }
+
+  .text-child-xl {
+    @apply text-3xl leading-relaxed;
+  }
+
+  .heading-child {
+    @apply text-3xl font-bold text-sky-700 mb-4;
+  }
+}
