@@ -5,7 +5,7 @@ import re
 import logging
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 from langgraph.graph import END, StateGraph
 
 from app.core.config import settings
@@ -150,10 +150,10 @@ def analyze_age_appropriateness(state: ContentSafetyState) -> Dict[str, Any]:
 def analyze_cultural_sensitivity(state: ContentSafetyState) -> Dict[str, Any]:
     """Analyze cultural sensitivity of the content."""
     try:
-        llm = ChatOpenAI(
-            model=settings.OPENAI_MODEL,
+        llm = ChatOllama(
+            model=settings.OLLAMA_MODEL,
+            base_url=settings.OLLAMA_BASE_URL,
             temperature=0.2,  # Low temperature for consistent analysis
-            openai_api_key=settings.OPENAI_API_KEY
         )
         
         analysis_prompt = f"""

@@ -21,10 +21,10 @@ cryptography==43.0.1
 # LangGraph & AI - Updated to latest compatible versions
 langgraph==0.2.50
 langchain==0.3.27
-langchain-openai==0.3.31
+langchain-ollama==0.3.7
 langchain-community==0.3.27
 langchain-core==0.3.74
-openai==1.51.2
+ollama>=0.5.3
 
 # Data Validation
 pydantic==2.9.2

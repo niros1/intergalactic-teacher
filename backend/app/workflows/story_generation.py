@@ -5,7 +5,7 @@ import json
 import logging
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 from langgraph.graph import END, StateGraph
 
 from app.core.config import settings
@@ -99,11 +99,11 @@ def create_story_prompt(state: StoryGenerationState) -> str:
 def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
     """Generate story content using OpenAI."""
     try:
-        llm = ChatOpenAI(
-            model=settings.OPENAI_MODEL,
-            temperature=settings.OPENAI_TEMPERATURE,
-            max_tokens=settings.OPENAI_MAX_TOKENS,
-            openai_api_key=settings.OPENAI_API_KEY
+        llm = ChatOllama(
+            model=settings.OLLAMA_MODEL,
+            base_url=settings.OLLAMA_BASE_URL,
+            temperature=settings.OLLAMA_TEMPERATURE,
+            num_predict=settings.OLLAMA_MAX_TOKENS,
         )
         
         # Create the prompt
@@ -221,10 +221,10 @@ def enhance_content_if_needed(state: StoryGenerationState) -> Dict[str, Any]:
     """Enhance content if safety score is borderline."""
     if not state["content_approved"] and state["safety_score"] > 0.3:
         try:
-            llm = ChatOpenAI(
-                model=settings.OPENAI_MODEL,
+            llm = ChatOllama(
+                model=settings.OLLAMA_MODEL,
+                base_url=settings.OLLAMA_BASE_URL,
                 temperature=0.3,  # Lower temperature for safety enhancement
-                openai_api_key=settings.OPENAI_API_KEY
             )
             
             enhancement_prompt = f"""

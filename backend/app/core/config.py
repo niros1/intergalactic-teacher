@@ -51,14 +51,14 @@ class Settings(BaseSettings):
     REDIS_DB: int = 0
     REDIS_PASSWORD: Optional[str] = None
     
-    # OpenAI Configuration
-    OPENAI_API_KEY: str
-    OPENAI_MODEL: str = "gpt-4"
-    OPENAI_MAX_TOKENS: int = 2000
-    OPENAI_TEMPERATURE: float = 0.7
+    # Ollama Configuration
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_MODEL: str = "llama3.2:latest"
+    OLLAMA_MAX_TOKENS: int = 2000
+    OLLAMA_TEMPERATURE: float = 0.7
     
     # Content Safety
-    OPENAI_MODERATION_ENABLED: bool = True
+    CONTENT_SAFETY_ENABLED: bool = True
     CONTENT_SAFETY_THRESHOLD: float = 0.5
     
     # CORS
