@@ -15,7 +15,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-intergalactic}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-intergalactic} -d ${DATABASE_NAME:-intergalactic_teacher}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -45,6 +45,7 @@ services:
     container_name: intergalactic_api
     ports:
       - "8000:8000"
+      - "9001:9000"
     environment:
       - DATABASE_URL=postgresql://${DATABASE_USER:-intergalactic}:${DATABASE_PASSWORD:-password}@db:5432/${DATABASE_NAME:-intergalactic_teacher}
       - REDIS_URL=redis://redis:6379/0

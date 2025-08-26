@@ -88,7 +88,7 @@ class Choice(Base):
     
     # Relationships
     story = relationship("Story", back_populates="choices")
-    branches = relationship("StoryBranch", back_populates="choice")
+    branches = relationship("StoryBranch", back_populates="choice", foreign_keys="StoryBranch.choice_id")
     
     def __repr__(self) -> str:
         return f"<Choice(id={self.id}, story_id={self.story_id})>"
@@ -124,7 +124,7 @@ class StoryBranch(Base):
     # Relationships
     story = relationship("Story", back_populates="branches")
     choice = relationship("Choice", back_populates="branches", foreign_keys=[choice_id])
-    next_choice = relationship("Choice", foreign_keys=[leads_to_choice_id])
+    next_choice = relationship("Choice", foreign_keys=[leads_to_choice_id], overlaps="branches")
     
     def __repr__(self) -> str:
         return f"<StoryBranch(id={self.id}, choice_id={self.choice_id}, option={self.choice_option_index})>"
