@@ -571,6 +571,17 @@ async def make_story_choice(
             )
         
         # Process the choice
+        # Handle special "continue" choice for advancing chapters without explicit choices
+        if choice_request.choice_id == "continue":
+            result = session_service.advance_to_next_chapter(session_id)
+            if not result["success"]:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=result.get("error", "Failed to advance to next chapter")
+                )
+            logger.info(f"Advanced to next chapter in session: {session_id}")
+            return result
+        
         # Convert string choice_id to integer for database lookup
         try:
             choice_id = int(choice_request.choice_id)

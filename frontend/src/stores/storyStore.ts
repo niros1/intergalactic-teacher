@@ -169,13 +169,17 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
         // Handle actual backend response format (cast to any to avoid type conflicts)
         const backendResult = result as any
         const branchContent = backendResult.branch_content || ""
-        const contentParagraphs = branchContent ? [branchContent] : []
         
-        // Update story with new content and choices
+        // Split branch content into paragraphs for display
+        const contentParagraphs = branchContent ? 
+          branchContent.split('\n\n').filter((p: string) => p.trim().length > 0) : 
+          ["Continue reading..."]
+        
+        // Replace current content with new chapter content (don't append)
         const updatedStory: Story = {
           ...currentStory,
-          content: [...(currentStory.content || []), ...contentParagraphs],
-          choices: backendResult.newChoices || [], // Backend might not return new choices yet
+          content: contentParagraphs,  // Replace content with new chapter
+          choices: backendResult.new_choices || [], // Use new_choices from backend response
           isCompleted: backendResult.is_ending || false,
           currentChapter: backendResult.next_chapter || (currentStory.currentChapter + 1)
         }
@@ -192,6 +196,13 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
         })
         
         localStorage.setItem('currentStory', JSON.stringify(updatedStory))
+        
+        // Log for debugging
+        console.log('Choice processed successfully:', {
+          newChapter: updatedStory.currentChapter,
+          contentLength: contentParagraphs.length,
+          isCompleted: updatedStory.isCompleted
+        })
       } else {
         set({ isLoading: false })
       }

@@ -68,9 +68,33 @@ const ReadingPage: React.FC = () => {
         choiceId: choiceId,
         timestamp: new Date().toISOString()
       })
-      setCurrentParagraph(0) // Reset to beginning of new content
+      setCurrentParagraph(0) // Reset to beginning of new chapter
     } catch (error) {
       console.error('Choice making failed:', error)
+      // Error is handled by the store
+    }
+  }
+
+  const handleContinueStory = async () => {
+    console.log('Continuing story to next chapter for sessionId:', sessionId)
+    
+    if (!sessionId) {
+      console.error('No session ID available for continuing story')
+      alert('Session not ready yet. Please wait a moment and try again.')
+      return
+    }
+
+    // For stories without choices, we need to create a way to advance to the next chapter
+    // We can create a default "continue" choice or implement a separate endpoint
+    // For now, let's use a special choice ID to indicate continuation
+    try {
+      await makeChoice(sessionId, {
+        choiceId: 'continue',
+        timestamp: new Date().toISOString()
+      })
+      setCurrentParagraph(0) // Reset to beginning of new chapter
+    } catch (error) {
+      console.error('Story continuation failed:', error)
       // Error is handled by the store
     }
   }
@@ -231,26 +255,37 @@ const ReadingPage: React.FC = () => {
           )}
 
           {/* More chapters available but no choices */}
-          {isLastParagraph && !hasChoices && hasMoreChapters && (
+          {isLastParagraph && !hasChoices && hasMoreChapters && !currentStory.isCompleted && (
             <div className="text-center mt-8">
               <h3 className="text-child-base font-bold text-gray-800 mb-4">
                 {currentChild.language === 'hebrew' 
-                  ? 'יש עוד תוכן זמין!' 
-                  : 'More content available!'}
+                  ? 'הפרק הסתיים!' 
+                  : 'Chapter Complete!'}
               </h3>
-              <p className="text-child-sm text-gray-600 mb-4">
+              <p className="text-child-sm text-gray-600 mb-6">
                 {currentChild.language === 'hebrew' 
-                  ? `אתה בפרק ${currentStory?.currentChapter} מתוך ${currentStory?.totalChapters}. התחלת לקרוא את הסיפור הזה.`
-                  : `You're on chapter ${currentStory?.currentChapter} of ${currentStory?.totalChapters}. You've started reading this story.`}
+                  ? `סיימת פרק ${currentStory?.currentChapter} מתוך ${currentStory?.totalChapters}. האם תרצה להמשיך לפרק הבא?`
+                  : `You've completed chapter ${currentStory?.currentChapter} of ${currentStory?.totalChapters}. Ready for the next chapter?`}
               </p>
-              <button
-                onClick={() => navigate('/child/dashboard')}
-                className="btn-primary"
-              >
-                {currentChild.language === 'hebrew' 
-                  ? 'חזור לבחור סיפורים אחרים' 
-                  : 'Go back to choose other stories'}
-              </button>
+              <div className="space-y-3">
+                <button
+                  onClick={handleContinueStory}
+                  disabled={isLoading}
+                  className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {currentChild.language === 'hebrew' 
+                    ? 'המשך לפרק הבא' 
+                    : 'Continue to Next Chapter'}
+                </button>
+                <button
+                  onClick={() => navigate('/child/dashboard')}
+                  className="btn-secondary"
+                >
+                  {currentChild.language === 'hebrew' 
+                    ? 'חזור לסיפורים' 
+                    : 'Back to Stories'}
+                </button>
+              </div>
             </div>
           )}
 

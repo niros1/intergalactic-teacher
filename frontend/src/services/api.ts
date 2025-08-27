@@ -3,7 +3,7 @@ import type { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'a
 import type { ApiResponse } from '../types'
 
 // Base API configuration
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001/api/v1'
 console.log(`BASE_URL: ${BASE_URL}`);
 
 // Custom error class for API errors

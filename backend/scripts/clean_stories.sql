@@ -9,13 +9,16 @@ BEGIN;
 -- 1. Delete all story sessions (reading history)
 DELETE FROM story_sessions;
 
--- 2. Delete all story branches
+-- 2. Delete all story chapters (new table)
+DELETE FROM story_chapters;
+
+-- 3. Delete all story branches  
 DELETE FROM story_branches;
 
--- 3. Delete all choices
+-- 4. Delete all choices
 DELETE FROM choices;
 
--- 4. Delete all stories
+-- 5. Delete all stories
 DELETE FROM stories;
 
 -- Reset sequences if needed (PostgreSQL)
@@ -24,6 +27,7 @@ ALTER SEQUENCE IF EXISTS stories_id_seq RESTART WITH 1;
 ALTER SEQUENCE IF EXISTS choices_id_seq RESTART WITH 1;
 ALTER SEQUENCE IF EXISTS story_branches_id_seq RESTART WITH 1;
 ALTER SEQUENCE IF EXISTS story_sessions_id_seq RESTART WITH 1;
+ALTER SEQUENCE IF EXISTS story_chapters_id_seq RESTART WITH 1;
 
 -- Verify what remains (should show users and children tables intact)
 SELECT 'Users count:' as info, COUNT(*) as count FROM users

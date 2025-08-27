@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from app.models.child import Child
-from app.models.story import Story, Choice, StoryBranch
+from app.models.story import Choice, Story, StoryBranch
 from app.models.story_session import StorySession
 from app.schemas.story_session import ReadingProgress
 
@@ -223,12 +223,32 @@ class StorySessionService:
             if session.is_completed:
                 self._update_child_progress(session, story_completed=True)
             
+            # Get new choices for the next chapter if available
+            new_choices = []
+            if branch.leads_to_chapter and not branch.is_ending:
+                choices_query = self.db.query(Choice).filter(
+                    Choice.story_id == session.story_id,
+                    Choice.chapter_number == branch.leads_to_chapter
+                ).all()
+                
+                for choice in choices_query:
+                    if choice.choices_data:
+                        for option in enumerate(choice.choices_data):
+                            if isinstance(option[1], dict) and 'text' in option[1]:
+                                new_choices.append({
+                                    'id': str(choice.id),
+                                    'text': option[1].get('text', ''),
+                                    'impact': option[1].get('impact', 'normal'),
+                                    'description': option[1].get('description', '')
+                                })
+            
             result = {
                 "success": True,
                 "branch_content": branch.content,
                 "is_ending": branch.is_ending,
                 "next_chapter": branch.leads_to_chapter,
-                "completion_percentage": session.completion_percentage
+                "completion_percentage": session.completion_percentage,
+                "new_choices": new_choices
             }
             
             logger.info(f"Choice processed for session: {session_id}")
@@ -236,6 +256,120 @@ class StorySessionService:
             
         except Exception as e:
             logger.error(f"Error processing story choice: {e}")
+            self.db.rollback()
+            return {"success": False, "error": str(e)}
+    
+    def advance_to_next_chapter(self, session_id: int) -> Dict:
+        """Advance to the next chapter without making a specific choice."""
+        try:
+            session = self.get_session_by_id(session_id)
+            if not session:
+                return {"success": False, "error": "Session not found"}
+            
+            # Check if there are more chapters available
+            if session.current_chapter >= session.story.total_chapters:
+                # Story is complete
+                session.is_completed = True
+                session.completion_percentage = 100
+                session.completed_at = datetime.utcnow()
+                self.db.commit()
+                
+                return {
+                    "success": True,
+                    "branch_content": "You have completed the entire story!",
+                    "is_ending": True,
+                    "next_chapter": session.current_chapter,
+                    "completion_percentage": 100,
+                    "new_choices": []
+                }
+            
+            # Advance to the next chapter
+            next_chapter = session.current_chapter + 1
+            
+            # Generate content for the next chapter
+            from app.services.story_service import StoryService
+            story_service = StoryService(self.db)
+            
+            generation_result = story_service.generate_personalized_story(
+                child=session.child,
+                theme=session.story.themes[0] if session.story.themes else "adventure",
+                chapter_number=next_chapter,
+                story_session=session
+            )
+            
+            if not generation_result["success"]:
+                return {"success": False, "error": "Failed to generate next chapter content"}
+            
+            # Create the new chapter
+            from app.models.story_chapter import StoryChapter
+            new_chapter = StoryChapter(
+                story_id=session.story_id,
+                chapter_number=next_chapter,
+                title=f"Chapter {next_chapter}",
+                content=generation_result["story_content"],
+                is_ending=next_chapter >= session.story.total_chapters,
+                is_published=True,
+                estimated_reading_time=generation_result.get("estimated_reading_time", 5),
+                word_count=len(generation_result["story_content"].split()) if generation_result["story_content"] else 0
+            )
+            
+            self.db.add(new_chapter)
+            
+            # Create choices for the new chapter if any were generated and it's not the ending
+            new_choices = []
+            if generation_result.get("choices", []) and not new_chapter.is_ending:
+                story_service._create_story_choices(session.story_id, next_chapter, generation_result["choices"])
+                
+                # Get the created choices to return to frontend
+                choices_query = self.db.query(Choice).filter(
+                    Choice.story_id == session.story_id,
+                    Choice.chapter_number == next_chapter
+                ).all()
+                
+                for choice in choices_query:
+                    if choice.choices_data:
+                        for option in enumerate(choice.choices_data):
+                            if isinstance(option[1], dict) and 'text' in option[1]:
+                                new_choices.append({
+                                    'id': str(choice.id),
+                                    'text': option[1].get('text', ''),
+                                    'impact': option[1].get('impact', 'normal'),
+                                    'description': option[1].get('description', '')
+                                })
+            
+            # Update session
+            session.current_chapter = next_chapter
+            if new_chapter.is_ending:
+                session.is_completed = True
+                session.completion_percentage = 100
+                session.completed_at = datetime.utcnow()
+            else:
+                # Update completion percentage based on chapters
+                session.completion_percentage = int((next_chapter - 1) / session.story.total_chapters * 100)
+            
+            session.last_accessed = datetime.utcnow()
+            
+            self.db.commit()
+            self.db.refresh(session)
+            
+            # Update child progress if story completed
+            if session.is_completed:
+                self._update_child_progress(session, story_completed=True)
+            
+            result = {
+                "success": True,
+                "branch_content": generation_result["story_content"],
+                "is_ending": new_chapter.is_ending,
+                "next_chapter": next_chapter,
+                "completion_percentage": session.completion_percentage,
+                "new_choices": new_choices
+            }
+            
+            logger.info(f"Advanced to chapter {next_chapter} for session: {session_id}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error advancing to next chapter: {e}")
             self.db.rollback()
             return {"success": False, "error": str(e)}
     

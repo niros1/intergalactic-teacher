@@ -511,6 +511,11 @@ class StoryService:
                     )
                     
                     self.db.add(new_chapter)
+                    
+                    # Create choices for the new chapter if any were generated
+                    new_choices = generation_result.get("choices", [])
+                    if new_choices and not story_branch.is_ending:
+                        self._create_story_choices(story_session.story_id, target_chapter, new_choices)
                 
                 self.db.commit()
                 
