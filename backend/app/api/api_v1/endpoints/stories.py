@@ -1,6 +1,7 @@
 """Stories management endpoints."""
 
 import logging
+from datetime import datetime
 from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -145,7 +146,7 @@ async def get_story_recommendations(
         )
 
 
-@router.post("/generate", response_model=StoryGenerationResponse)
+@router.post("/generate")
 async def generate_story(
     generation_request: StoryGenerationRequest,
     current_user: User = Depends(get_current_active_user),
@@ -197,7 +198,34 @@ async def generate_story(
             )
         
         logger.info(f"Generated story for child: {generation_request.child_id}, theme: {generation_request.theme}")
-        return StoryGenerationResponse(**result)
+        
+        # Transform response to match frontend expectations
+        # Split story content into paragraphs
+        story_content = result.get("story_content", "")
+        paragraphs = [p.strip() for p in story_content.split('\n\n') if p.strip()]
+        if not paragraphs:
+            paragraphs = [story_content]  # Fallback to single paragraph
+        
+        # Create response matching frontend Story interface
+        response = {
+            "id": f"gen-{generation_request.child_id}-{generation_request.chapter_number}",
+            "title": generation_request.title or f"{generation_request.theme.capitalize()} Adventure",
+            "content": paragraphs,  # Array of paragraphs instead of single string
+            "language": child.language_preference or "english",
+            "readingLevel": child.reading_level or "beginner",
+            "theme": generation_request.theme,
+            "choices": result.get("choices", []),
+            "isCompleted": False,
+            "currentChapter": generation_request.chapter_number,
+            "totalChapters": 3,  # Default to 3 chapters
+            "createdAt": datetime.utcnow().isoformat(),
+            "success": result.get("success", True),
+            "safety_score": result.get("safety_score", 1.0),
+            "educational_elements": result.get("educational_elements", []),
+            "estimated_reading_time": result.get("estimated_reading_time", 5)
+        }
+        
+        return response
         
     except HTTPException:
         raise

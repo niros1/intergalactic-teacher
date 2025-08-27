@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, Field, validator
 
 
 class StoryBase(BaseModel):
@@ -58,7 +58,7 @@ class StoryResponse(StoryBase):
     created_at: datetime
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class StoryWithChoices(StoryResponse):
@@ -66,7 +66,7 @@ class StoryWithChoices(StoryResponse):
     choices: List['ChoiceResponse'] = []
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ChoiceBase(BaseModel):
@@ -86,7 +86,7 @@ class ChoiceResponse(ChoiceBase):
     created_at: datetime
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class StoryBranchResponse(BaseModel):
@@ -102,15 +102,18 @@ class StoryBranchResponse(BaseModel):
     is_ending: bool
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class StoryGenerationRequest(BaseModel):
     """Schema for story generation request."""
-    child_id: int
+    child_id: int = Field(alias="childId")
     theme: str
     title: Optional[str] = None
-    chapter_number: int = 1
+    chapter_number: int = Field(default=1, alias="chapterNumber")
+    
+    class Config:
+        populate_by_name = True
 
 
 class StoryGenerationResponse(BaseModel):

@@ -97,7 +97,7 @@ def create_story_prompt(state: StoryGenerationState) -> str:
 
 
 def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
-    """Generate story content using OpenAI."""
+    """Generate story content using Ollama."""
     try:
         llm = ChatOllama(
             model=settings.OLLAMA_MODEL,
@@ -120,24 +120,74 @@ def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
         
         # Try to parse JSON response
         try:
-            if content.startswith("```json"):
-                content = content[7:-3].strip()
-            elif content.startswith("```"):
-                content = content[3:-3].strip()
+            # Extract JSON from various formats the model might return
+            json_content = content
             
-            story_data = json.loads(content)
+            # Check if content has markdown code blocks
+            if "```json" in content:
+                start = content.find("```json") + 7
+                end = content.find("```", start)
+                if end > start:
+                    json_content = content[start:end].strip()
+            elif "```" in content:
+                start = content.find("```") + 3
+                end = content.find("```", start)
+                if end > start:
+                    json_content = content[start:end].strip()
+            
+            # Try to find JSON object in the content
+            if "{" in json_content:
+                start = json_content.find("{")
+                end = json_content.rfind("}") + 1
+                if end > start:
+                    json_content = json_content[start:end]
+            
+            story_data = json.loads(json_content)
+            
+            # Extract the actual story content and choices
+            story_text = story_data.get("story_content", "")
+            choices = story_data.get("choices", [])
+            
+            # Ensure choices is a proper list
+            if not isinstance(choices, list):
+                choices = []
+            
+            # Validate choice structure
+            valid_choices = []
+            for choice in choices:
+                if isinstance(choice, dict) and "text" in choice:
+                    valid_choices.append({
+                        "text": choice.get("text", ""),
+                        "description": choice.get("description", "")
+                    })
+            
+            if not valid_choices:
+                # Provide default choices if none are valid
+                valid_choices = [
+                    {"text": "Continue the adventure", "description": "See what happens next"},
+                    {"text": "Make a different choice", "description": "Try a different path"}
+                ]
             
             return {
-                "story_content": story_data.get("story_content", ""),
-                "choices": story_data.get("choices", []),
-                "educational_elements": story_data.get("educational_elements", []),
+                "story_content": story_text,
+                "choices": valid_choices,
+                "educational_elements": story_data.get("educational_elements", ["Reading comprehension", "Decision making"]),
                 "vocabulary_words": story_data.get("vocabulary_words", []),
             }
             
-        except json.JSONDecodeError:
-            logger.warning("Failed to parse JSON response, using raw content")
+        except (json.JSONDecodeError, Exception) as e:
+            logger.warning(f"Failed to parse JSON response: {e}, using fallback")
+            # Extract any readable text from the content
+            clean_content = content
+            if "story_content" in content:
+                # Try to extract just the story text
+                import re
+                match = re.search(r'"story_content"\s*:\s*"([^"]+)"', content)
+                if match:
+                    clean_content = match.group(1)
+            
             return {
-                "story_content": content,
+                "story_content": clean_content[:500] if len(clean_content) > 500 else clean_content,  # Limit length
                 "choices": [
                     {"text": "Continue the adventure", "description": "See what happens next"},
                     {"text": "Make a different choice", "description": "Try a different path"}
@@ -152,36 +202,12 @@ def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
 
 
 def check_content_safety(state: StoryGenerationState) -> Dict[str, Any]:
-    """Check content safety using OpenAI moderation and custom checks."""
+    """Check content safety using simple keyword-based checks (Ollama mode)."""
     try:
-        from openai import OpenAI
-        
-        client = OpenAI(api_key=settings.OPENAI_API_KEY)
-        
-        # Use OpenAI moderation API
-        moderation_response = client.moderations.create(
-            input=state["story_content"]
-        )
-        
-        moderation_result = moderation_response.results[0]
-        
-        # Check if content is flagged
-        is_flagged = moderation_result.flagged
+        # Since we're using Ollama instead of OpenAI, 
+        # implement a simple keyword-based safety check
         safety_score = 1.0  # Start with perfect score
         content_issues = []
-        
-        if is_flagged:
-            # Calculate safety score based on category scores
-            categories = moderation_result.categories
-            category_scores = moderation_result.category_scores
-            
-            flagged_categories = [cat for cat, flagged in categories.__dict__.items() if flagged]
-            
-            if flagged_categories:
-                content_issues.extend(flagged_categories)
-                # Calculate weighted safety score
-                max_score = max(category_scores.__dict__.values())
-                safety_score = 1.0 - max_score
         
         # Additional custom checks for children's content
         content_lower = state["story_content"].lower()
