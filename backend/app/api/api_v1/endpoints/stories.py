@@ -202,15 +202,31 @@ async def generate_story(
         # Transform response to match frontend expectations
         # Split story content into paragraphs
         story_content = result.get("story_content", "")
+        
+        # Clean up any remaining JSON artifacts or meta text
+        import re
+        story_content = re.sub(r'```json.*?```', '', story_content, flags=re.DOTALL)
+        story_content = re.sub(r'Here is Chapter \d+ of the story:', '', story_content)
+        story_content = re.sub(r'Please let me know.*?continue.*?\.', '', story_content, flags=re.IGNORECASE)
+        story_content = story_content.strip()
+        
+        # Split into paragraphs
         paragraphs = [p.strip() for p in story_content.split('\n\n') if p.strip()]
-        if not paragraphs:
-            paragraphs = [story_content]  # Fallback to single paragraph
+        
+        # Filter out any paragraphs that look like JSON
+        clean_paragraphs = []
+        for p in paragraphs:
+            if not any(char in p for char in ['{', '}', '"story_content"', '```']):
+                clean_paragraphs.append(p)
+        
+        if not clean_paragraphs:
+            clean_paragraphs = [story_content] if story_content else ["Once upon a time..."]
         
         # Create response matching frontend Story interface
         response = {
             "id": f"gen-{generation_request.child_id}-{generation_request.chapter_number}",
             "title": generation_request.title or f"{generation_request.theme.capitalize()} Adventure",
-            "content": paragraphs,  # Array of paragraphs instead of single string
+            "content": clean_paragraphs,  # Array of clean paragraphs
             "language": child.language_preference or "english",
             "readingLevel": child.reading_level or "beginner",
             "theme": generation_request.theme,

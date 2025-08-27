@@ -146,6 +146,8 @@ def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
             
             # Extract the actual story content and choices
             story_text = story_data.get("story_content", "")
+            # Clean up any escape characters and formatting
+            story_text = story_text.replace('\\n', '\n').replace('\\"', '"').strip()
             choices = story_data.get("choices", [])
             
             # Ensure choices is a proper list
@@ -179,15 +181,31 @@ def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
             logger.warning(f"Failed to parse JSON response: {e}, using fallback")
             # Extract any readable text from the content
             clean_content = content
-            if "story_content" in content:
-                # Try to extract just the story text
+            
+            # Remove common JSON artifacts
+            clean_content = clean_content.replace('```json', '').replace('```', '')
+            clean_content = clean_content.replace('Here is Chapter 1 of the story:', '')
+            clean_content = clean_content.replace('Please let me know if you\'d like me to continue', '')
+            
+            # Try to extract story_content value if present
+            if "story_content" in clean_content:
                 import re
-                match = re.search(r'"story_content"\s*:\s*"([^"]+)"', content)
+                # Try to extract content between quotes after story_content
+                match = re.search(r'"story_content"\s*:\s*"([^"]+)"', clean_content, re.DOTALL)
                 if match:
                     clean_content = match.group(1)
+                    clean_content = clean_content.replace('\\n', '\n').replace('\\"', '"')
+            
+            # Remove any remaining JSON structure
+            clean_content = re.sub(r'[{}\[\]"]', '', clean_content)
+            clean_content = re.sub(r'\s+', ' ', clean_content).strip()
+            
+            # If content is too messy, provide a simple fallback story
+            if len(clean_content) < 50 or '{' in clean_content:
+                clean_content = "Once upon a time in a magical forest, there lived a curious little rabbit named Rosie. She loved to explore and make new friends. Today was going to be a special adventure!"
             
             return {
-                "story_content": clean_content[:500] if len(clean_content) > 500 else clean_content,  # Limit length
+                "story_content": clean_content[:1000],  # Reasonable length
                 "choices": [
                     {"text": "Continue the adventure", "description": "See what happens next"},
                     {"text": "Make a different choice", "description": "Try a different path"}
