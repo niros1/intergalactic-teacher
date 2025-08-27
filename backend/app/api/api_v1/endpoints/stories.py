@@ -223,7 +223,7 @@ async def generate_story(
             clean_paragraphs = [story_content] if story_content else ["Once upon a time..."]
         
         # Save story to database so choices can be persisted
-        from app.models.story import Story, Choice
+        from app.models.story import Story, Choice, StoryBranch
         story = Story(
             title=generation_request.title or f"{generation_request.theme.capitalize()} Adventure",
             content=story_content,
@@ -266,6 +266,19 @@ async def generate_story(
                 "impact": choice_data.get("description", "See what happens next")
             }
             choices_with_ids.append(choice_with_id)
+            
+            # Create StoryBranch for this choice option
+            # For now, create a simple continuation branch
+            story_branch = StoryBranch(
+                story_id=story.id,
+                choice_id=choice.id,
+                choice_option_index=0,  # Single option per choice for now
+                branch_name=f"Branch from choice {choice.id}",
+                content=f"You chose: {choice_data.get('text', 'Continue')}. The story continues...",
+                leads_to_chapter=generation_request.chapter_number + 1,
+                is_ending=generation_request.chapter_number >= 3  # End after 3 chapters
+            )
+            db.add(story_branch)
         
         db.commit()
         

@@ -137,13 +137,17 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
       
       const { currentStory } = get()
       if (currentStory) {
+        // Handle actual backend response format
+        const branchContent = result.branch_content || ""
+        const contentParagraphs = branchContent ? [branchContent] : []
+        
         // Update story with new content and choices
         const updatedStory: Story = {
           ...currentStory,
-          content: [...currentStory.content, ...result.nextContent],
-          choices: result.newChoices,
-          isCompleted: result.isStoryComplete,
-          currentChapter: currentStory.currentChapter + 1
+          content: [...currentStory.content, ...contentParagraphs],
+          choices: result.newChoices || [], // Backend might not return new choices yet
+          isCompleted: result.is_ending || false,
+          currentChapter: result.next_chapter || (currentStory.currentChapter + 1)
         }
         
         set({

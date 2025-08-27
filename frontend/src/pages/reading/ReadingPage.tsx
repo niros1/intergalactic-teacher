@@ -29,7 +29,7 @@ const ReadingPage: React.FC = () => {
             actualSessionId = sessionResponse.session.id
           } else {
             // Direct session format: StorySession
-            actualSessionId = sessionResponse.id
+            actualSessionId = (sessionResponse as any).id
           }
           console.log('Setting session ID:', actualSessionId)
           setSessionId(actualSessionId)
