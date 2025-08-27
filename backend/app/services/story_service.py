@@ -8,10 +8,10 @@ from sqlalchemy.orm import Session
 
 from app.models.child import Child
 from app.models.story import Choice, Story, StoryBranch
+from app.models.story_chapter import StoryChapter
 from app.models.story_session import StorySession
-# Temporarily commented out for testing
-# from app.workflows.story_generation import story_workflow, StoryGenerationState
-# from app.workflows.content_safety import content_safety_workflow, ContentSafetyState
+from app.workflows.story_generation import story_workflow, StoryGenerationState
+from app.workflows.content_safety import content_safety_workflow, ContentSafetyState
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +43,26 @@ class StoryService:
                     chapters = story_content.split("\n\n---\n\n")
                     previous_chapters = chapters[:chapter_number-1]
                 
-                # Get previous choices
+                # Get previous choices and convert to expected format
                 if story_session.choices_made:
-                    previous_choices = story_session.choices_made
+                    previous_choices = []
+                    for choice_data in story_session.choices_made:
+                        # Get the actual choice from database
+                        choice_id = choice_data.get("choice_id")
+                        option_index = choice_data.get("option_index", 0)
+                        
+                        if choice_id:
+                            choice = self.db.query(Choice).filter(Choice.id == choice_id).first()
+                            if choice and choice.choices_data and option_index < len(choice.choices_data):
+                                chosen_option_text = choice.choices_data[option_index].get("text", "Unknown option")
+                                previous_choices.append({
+                                    "question": choice.question,
+                                    "chosen_option": chosen_option_text
+                                })
+                    
+                    # If no valid choices found, use empty list
+                    if not previous_choices:
+                        previous_choices = []
             
             initial_state = StoryGenerationState(
                 child_preferences=child.reading_preferences,
@@ -102,10 +119,10 @@ class StoryService:
                 logger.error(f"Failed to generate story: {generation_result.get('error')}")
                 return None
             
-            # Create the story record
+            # Create the story record (without content - stored in chapters)
             story = Story(
                 title=title,
-                content=generation_result["story_content"],
+                content="",  # Content will be stored in chapters
                 language=child.language_preference,
                 difficulty_level=child.reading_level,
                 themes=[theme],
@@ -123,6 +140,22 @@ class StoryService:
             self.db.add(story)
             self.db.commit()
             self.db.refresh(story)
+            
+            # Create the first chapter record
+            chapter = StoryChapter(
+                story_id=story.id,
+                chapter_number=1,
+                title=f"Chapter 1",
+                content=generation_result["story_content"],
+                is_ending=False,
+                is_published=True,
+                estimated_reading_time=generation_result.get("estimated_reading_time", 5),
+                word_count=len(generation_result["story_content"].split()) if generation_result["story_content"] else 0
+            )
+            
+            self.db.add(chapter)
+            self.db.commit()
+            self.db.refresh(chapter)
             
             # Create choices if any
             choices = generation_result.get("choices", [])
@@ -218,22 +251,30 @@ class StoryService:
                 StorySession.story_id == story.id
             ).order_by(StorySession.last_accessed.desc()).first()
             
-            # Get the content for the current chapter
+            # Get the content for the current chapter from chapters table
             current_chapter = session.current_chapter if session else 1
-            story_content = story.content
             
-            # Split content by chapters if it contains chapter markers
-            if "\n\n---\n\n" in story_content:
-                chapters = story_content.split("\n\n---\n\n")
-                # Get the content for the current chapter (0-indexed)
-                if current_chapter <= len(chapters):
-                    chapter_content = chapters[current_chapter - 1]
+            # Get the current chapter from the chapters table
+            chapter_record = self.db.query(StoryChapter).filter(
+                StoryChapter.story_id == story.id,
+                StoryChapter.chapter_number == current_chapter
+            ).first()
+            
+            # Use chapter content if available, otherwise fall back to story content
+            if chapter_record:
+                chapter_content = chapter_record.content
+            elif story.content:
+                # Fallback for legacy stories - split content by chapter markers
+                if "\n\n---\n\n" in story.content:
+                    chapters = story.content.split("\n\n---\n\n")
+                    if current_chapter <= len(chapters):
+                        chapter_content = chapters[current_chapter - 1]
+                    else:
+                        chapter_content = chapters[-1] if chapters else story.content
                 else:
-                    # If we're beyond available chapters, use the last one
-                    chapter_content = chapters[-1] if chapters else story_content
+                    chapter_content = story.content
             else:
-                # No chapter markers, use full content
-                chapter_content = story_content
+                chapter_content = "Chapter content not available"
             
             # Get choices for current chapter if they exist
             choices_data = []
@@ -444,8 +485,33 @@ class StoryService:
             )
             
             if generation_result["success"]:
-                # Save the generated content
+                # Save the generated content in the branch
                 story_branch.content = generation_result["story_content"]
+                
+                # Also create a chapter record if this leads to a new chapter
+                target_chapter = story_branch.leads_to_chapter or choice.chapter_number + 1
+                existing_chapter = self.db.query(StoryChapter).filter(
+                    StoryChapter.story_id == story_session.story_id,
+                    StoryChapter.chapter_number == target_chapter
+                ).first()
+                
+                if not existing_chapter:
+                    # Create new chapter record
+                    new_chapter = StoryChapter(
+                        story_id=story_session.story_id,
+                        chapter_number=target_chapter,
+                        title=f"Chapter {target_chapter}",
+                        content=generation_result["story_content"],
+                        created_from_choice_id=story_branch.choice_id,
+                        created_from_branch_id=story_branch.id,
+                        is_ending=story_branch.is_ending,
+                        is_published=True,
+                        estimated_reading_time=generation_result.get("estimated_reading_time", 5),
+                        word_count=len(generation_result["story_content"].split()) if generation_result["story_content"] else 0
+                    )
+                    
+                    self.db.add(new_chapter)
+                
                 self.db.commit()
                 
                 return story_branch.content

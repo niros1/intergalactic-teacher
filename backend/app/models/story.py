@@ -58,6 +58,7 @@ class Story(Base):
     choices = relationship("Choice", back_populates="story", cascade="all, delete-orphan")
     branches = relationship("StoryBranch", back_populates="story", cascade="all, delete-orphan")
     sessions = relationship("StorySession", back_populates="story")
+    chapters = relationship("StoryChapter", back_populates="story", cascade="all, delete-orphan", order_by="StoryChapter.chapter_number")
     
     def __repr__(self) -> str:
         return f"<Story(id={self.id}, title='{self.title[:30]}...')>"

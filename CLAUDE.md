@@ -1,2 +1,3 @@
 - "always check if there is a sub agnet that is suitable for a task, if not take it on your own"
 - when update beackend code run "docker-compose up --build -d api"
+- DO NOT GENERATE MOCK DATA AND CODE - WE ARE IN REAL SYSTEM
