@@ -24,15 +24,24 @@ class StoryService {
     total: number
     hasMore: boolean
   }> {
-    const params = filters ? { ...filters } : {}
+    const params = filters ? { 
+      ...filters,
+      // Map childId to child_id for backend API
+      child_id: filters.childId,
+      childId: undefined // Remove the camelCase version
+    } : {}
     
-    return await apiRequest<{
-      stories: Story[]
-      total: number
-      hasMore: boolean
-    }>(() =>
-      api.get<ApiResponse<any>>('/stories', { params })
+    // Backend returns array directly, not wrapped in an object
+    const storiesArray = await apiRequest<Story[]>(() =>
+      api.get<ApiResponse<Story[]>>('/stories', { params })
     )
+    
+    // Transform to expected format
+    return {
+      stories: storiesArray || [],
+      total: storiesArray?.length || 0,
+      hasMore: false // No pagination info from backend yet
+    }
   }
 
   /**

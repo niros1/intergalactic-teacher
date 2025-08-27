@@ -76,7 +76,7 @@ const ReadingPage: React.FC = () => {
   }
 
   const handleNextParagraph = () => {
-    if (currentParagraph < currentStory.content.length - 1) {
+    if (currentStory?.content && currentParagraph < currentStory.content.length - 1) {
       setCurrentParagraph(prev => prev + 1)
     }
   }
@@ -111,8 +111,8 @@ const ReadingPage: React.FC = () => {
     }
   }
 
-  const isLastParagraph = currentParagraph === currentStory.content.length - 1
-  const hasChoices = currentStory.choices.length > 0
+  const isLastParagraph = currentStory?.content ? currentParagraph === currentStory.content.length - 1 : false
+  const hasChoices = currentStory?.choices ? currentStory.choices.length > 0 : false
 
   return (
     <div className="min-h-screen p-4">
@@ -189,14 +189,14 @@ const ReadingPage: React.FC = () => {
             }`}
             dir={currentChild.language === 'hebrew' ? 'rtl' : 'ltr'}
           >
-            {currentStory.content[currentParagraph]}
+            {currentStory?.content?.[currentParagraph] || 'Loading content...'}
           </div>
 
           {/* Paragraph Navigation */}
           <div className="text-center text-sm text-gray-500 mb-4">
             {currentChild.language === 'hebrew' 
-              ? `פסקה ${currentParagraph + 1} מתוך ${currentStory.content.length}`
-              : `Paragraph ${currentParagraph + 1} of ${currentStory.content.length}`}
+              ? `פסקה ${currentParagraph + 1} מתוך ${currentStory?.content?.length || 0}`
+              : `Paragraph ${currentParagraph + 1} of ${currentStory?.content?.length || 0}`}
           </div>
 
           {/* Choices */}
@@ -212,7 +212,7 @@ const ReadingPage: React.FC = () => {
                 Session: {sessionId || 'Creating...'}
               </div>
               <div className="grid gap-4">
-                {currentStory.choices.map(choice => (
+                {(currentStory?.choices || []).map(choice => (
                   <button
                     key={choice.id}
                     onClick={() => handleChoice(choice.id)}

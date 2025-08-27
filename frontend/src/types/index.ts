@@ -207,6 +207,7 @@ export interface CreateStoryRequest {
 }
 
 export interface StoryFilters {
+  childId?: string
   theme?: Theme
   language?: Language
   readingLevel?: ReadingLevel

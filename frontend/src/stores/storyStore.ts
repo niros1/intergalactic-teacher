@@ -61,10 +61,33 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
   loadStories: async (filters?: StoryFilters) => {
     set({ isLoading: true, error: null })
     try {
-      const { stories } = await storyService.getStories(filters)
+      const response = await storyService.getStories(filters)
+      console.log('LoadStories response:', response)
+      
+      // Handle different response formats
+      const stories = response.stories || response || []
+      
+      // Ensure stories is an array
+      if (!Array.isArray(stories)) {
+        console.warn('Expected stories array but got:', stories)
+        set({ stories: [], isLoading: false })
+        return
+      }
+      
+      // Transform backend stories to frontend format
+      const transformedStories = stories.map(story => ({
+        ...story,
+        id: story.id.toString(), // Ensure ID is string for frontend
+        content: Array.isArray(story.content) 
+          ? story.content 
+          : [story.content || "Story content loading..."], // Convert string to array
+        choices: story.choices || [], // Ensure choices array exists
+        readingLevel: (story as any).difficulty_level || story.readingLevel,
+        language: story.language
+      }))
       
       set({
-        stories,
+        stories: transformedStories,
         isLoading: false
       })
     } catch (error) {
@@ -137,21 +160,28 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
       
       const { currentStory } = get()
       if (currentStory) {
-        // Handle actual backend response format
-        const branchContent = result.branch_content || ""
+        // Handle actual backend response format (cast to any to avoid type conflicts)
+        const backendResult = result as any
+        const branchContent = backendResult.branch_content || ""
         const contentParagraphs = branchContent ? [branchContent] : []
         
         // Update story with new content and choices
         const updatedStory: Story = {
           ...currentStory,
-          content: [...currentStory.content, ...contentParagraphs],
-          choices: result.newChoices || [], // Backend might not return new choices yet
-          isCompleted: result.is_ending || false,
-          currentChapter: result.next_chapter || (currentStory.currentChapter + 1)
+          content: [...(currentStory.content || []), ...contentParagraphs],
+          choices: backendResult.newChoices || [], // Backend might not return new choices yet
+          isCompleted: backendResult.is_ending || false,
+          currentChapter: backendResult.next_chapter || (currentStory.currentChapter + 1)
         }
+        
+        // Also update the story in the stories array
+        const updatedStories = get().stories.map(story => 
+          story.id === updatedStory.id ? updatedStory : story
+        )
         
         set({
           currentStory: updatedStory,
+          stories: updatedStories,
           isLoading: false
         })
         
