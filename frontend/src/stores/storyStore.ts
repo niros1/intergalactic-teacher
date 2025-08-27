@@ -83,7 +83,13 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
           : [story.content || "Story content loading..."], // Convert string to array
         choices: story.choices || [], // Ensure choices array exists
         readingLevel: (story as any).difficulty_level || story.readingLevel,
-        language: story.language
+        language: story.language,
+        // Backend now returns current_chapter and is_completed from sessions
+        currentChapter: (story as any).current_chapter || story.currentChapter || 1,
+        totalChapters: (story as any).total_chapters || story.totalChapters || 3,
+        isCompleted: (story as any).is_completed || story.isCompleted || false,
+        theme: (story as any).themes?.[0] || story.theme || 'adventure', // Extract first theme
+        createdAt: story.createdAt || (story as any).created_at
       }))
       
       set({

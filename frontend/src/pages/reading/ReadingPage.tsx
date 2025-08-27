@@ -79,6 +79,7 @@ const ReadingPage: React.FC = () => {
     if (currentStory?.content && currentParagraph < currentStory.content.length - 1) {
       setCurrentParagraph(prev => prev + 1)
     }
+    // Don't show alert here - let the choices section handle chapter transitions
   }
 
   const handlePreviousParagraph = () => {
@@ -113,6 +114,7 @@ const ReadingPage: React.FC = () => {
 
   const isLastParagraph = currentStory?.content ? currentParagraph === currentStory.content.length - 1 : false
   const hasChoices = currentStory?.choices ? currentStory.choices.length > 0 : false
+  const hasMoreChapters = currentStory ? currentStory.currentChapter < currentStory.totalChapters : false
 
   return (
     <div className="min-h-screen p-4">
@@ -200,7 +202,7 @@ const ReadingPage: React.FC = () => {
           </div>
 
           {/* Choices */}
-          {isLastParagraph && hasChoices && (
+          {(isLastParagraph && hasChoices) && (
             <div className="mt-8">
               <h3 className="text-child-base font-bold text-gray-800 mb-4">
                 {currentChild.language === 'hebrew' 
@@ -225,6 +227,30 @@ const ReadingPage: React.FC = () => {
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* More chapters available but no choices */}
+          {isLastParagraph && !hasChoices && hasMoreChapters && (
+            <div className="text-center mt-8">
+              <h3 className="text-child-base font-bold text-gray-800 mb-4">
+                {currentChild.language === 'hebrew' 
+                  ? 'יש עוד תוכן זמין!' 
+                  : 'More content available!'}
+              </h3>
+              <p className="text-child-sm text-gray-600 mb-4">
+                {currentChild.language === 'hebrew' 
+                  ? `אתה בפרק ${currentStory?.currentChapter} מתוך ${currentStory?.totalChapters}. התחלת לקרוא את הסיפור הזה.`
+                  : `You're on chapter ${currentStory?.currentChapter} of ${currentStory?.totalChapters}. You've started reading this story.`}
+              </p>
+              <button
+                onClick={() => navigate('/child/dashboard')}
+                className="btn-primary"
+              >
+                {currentChild.language === 'hebrew' 
+                  ? 'חזור לבחור סיפורים אחרים' 
+                  : 'Go back to choose other stories'}
+              </button>
             </div>
           )}
 

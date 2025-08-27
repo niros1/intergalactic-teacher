@@ -69,6 +69,17 @@ class StoryWithChoices(StoryResponse):
         from_attributes = True
 
 
+class StoryWithProgress(StoryResponse):
+    """Schema for story with reading progress."""
+    choices: List['ChoiceResponse'] = []
+    current_chapter: int = 1
+    is_completed: bool = False
+    completion_percentage: int = 0
+    
+    class Config:
+        from_attributes = True
+
+
 class ChoiceBase(BaseModel):
     """Base choice schema."""
     question: str

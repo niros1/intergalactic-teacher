@@ -9,8 +9,9 @@ from sqlalchemy.orm import Session
 from app.models.child import Child
 from app.models.story import Choice, Story, StoryBranch
 from app.models.story_session import StorySession
-from app.workflows.story_generation import story_workflow, StoryGenerationState
-from app.workflows.content_safety import content_safety_workflow, ContentSafetyState
+# Temporarily commented out for testing
+# from app.workflows.story_generation import story_workflow, StoryGenerationState
+# from app.workflows.content_safety import content_safety_workflow, ContentSafetyState
 
 logger = logging.getLogger(__name__)
 
@@ -187,8 +188,9 @@ class StoryService:
         child: Child,
         limit: int = 20,
         theme: Optional[str] = None
-    ) -> List[Story]:
-        """Get stories appropriate for a child."""
+    ) -> List[Dict]:
+        """Get stories appropriate for a child with their reading progress."""
+        # Get stories appropriate for the child
         query = self.db.query(Story).filter(
             Story.is_published == True,
             Story.language == child.language_preference,
@@ -205,7 +207,44 @@ class StoryService:
             Story.created_at.desc()
         )
         
-        return query.limit(limit).all()
+        stories = query.limit(limit).all()
+        
+        # Enhance stories with session progress
+        enhanced_stories = []
+        for story in stories:
+            # Get the most recent session for this child and story
+            session = self.db.query(StorySession).filter(
+                StorySession.child_id == child.id,
+                StorySession.story_id == story.id
+            ).order_by(StorySession.last_accessed.desc()).first()
+            
+            # Convert to dict and add progress information
+            story_dict = {
+                'id': story.id,
+                'title': story.title,
+                'description': story.description,
+                'content': story.content,
+                'language': story.language,
+                'difficulty_level': story.difficulty_level,
+                'themes': story.themes,
+                'target_age_min': story.target_age_min,
+                'target_age_max': story.target_age_max,
+                'estimated_reading_time': story.estimated_reading_time,
+                'total_chapters': story.total_chapters,
+                'has_choices': story.has_choices,
+                'generated_by_ai': story.generated_by_ai,
+                'content_safety_score': story.content_safety_score,
+                'is_published': story.is_published,
+                'created_at': story.created_at,
+                'choices': [],  # Add choices if needed
+                'current_chapter': session.current_chapter if session else 1,
+                'is_completed': session.is_completed if session else False,
+                'completion_percentage': session.completion_percentage if session else 0,
+            }
+            
+            enhanced_stories.append(story_dict)
+        
+        return enhanced_stories
     
     def get_published_stories(
         self,

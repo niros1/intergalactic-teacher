@@ -13,6 +13,7 @@ from app.schemas.story import (
     StoryCreate,
     StoryResponse,
     StoryWithChoices,
+    StoryWithProgress,
     StoryGenerationRequest,
     StoryGenerationResponse,
     ChoiceSelectionRequest,
@@ -35,7 +36,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/", response_model=List[StoryResponse])
+@router.get("/", response_model=List[StoryWithProgress])
 async def get_stories(
     child_id: Optional[int] = Query(None, description="Filter stories for specific child"),
     theme: Optional[str] = Query(None, description="Filter by story theme"),
