@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, Field, validator
 
 
 class StorySessionBase(BaseModel):
@@ -12,9 +12,13 @@ class StorySessionBase(BaseModel):
     story_id: int
 
 
-class StorySessionCreate(StorySessionBase):
+class StorySessionCreate(BaseModel):
     """Schema for creating a story session."""
-    pass
+    child_id: int = Field(alias="childId")
+    story_id: int = Field(alias="storyId")
+    
+    class Config:
+        populate_by_name = True
 
 
 class StorySessionUpdate(BaseModel):
@@ -56,7 +60,7 @@ class StorySessionResponse(StorySessionBase):
     completed_at: Optional[datetime]
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class StorySessionWithStory(StorySessionResponse):
@@ -64,7 +68,7 @@ class StorySessionWithStory(StorySessionResponse):
     story: 'StoryResponse'
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class StorySessionSummary(BaseModel):

@@ -222,23 +222,70 @@ async def generate_story(
         if not clean_paragraphs:
             clean_paragraphs = [story_content] if story_content else ["Once upon a time..."]
         
+        # Save story to database so choices can be persisted
+        from app.models.story import Story, Choice
+        story = Story(
+            title=generation_request.title or f"{generation_request.theme.capitalize()} Adventure",
+            content=story_content,
+            language=child.language_preference or "english",
+            difficulty_level=child.reading_level or "beginner", 
+            themes=[generation_request.theme],
+            target_age_min=max(3, child.age - 2),
+            target_age_max=min(18, child.age + 2),
+            estimated_reading_time=result.get("estimated_reading_time", 5),
+            total_chapters=3,
+            has_choices=len(result.get("choices", [])) > 0,
+            generated_by_ai=True,
+            content_safety_score=result.get("safety_score", 1.0),
+            is_published=True
+        )
+        
+        db.add(story)
+        db.flush()  # Get the story ID
+        
+        # Create Choice records for the generated choices
+        choices_with_ids = []
+        for i, choice_data in enumerate(result.get("choices", [])):
+            choice = Choice(
+                story_id=story.id,
+                chapter_number=generation_request.chapter_number,
+                position_in_chapter=i + 1,
+                question="What would you like to do?",
+                choices_data=[choice_data],  # Store the choice data
+                default_choice_index=0,
+                is_critical_choice=False
+            )
+            db.add(choice)
+            db.flush()
+            
+            # Add database ID to choice data for frontend
+            choice_with_id = {
+                "id": str(choice.id),  # Convert to string for frontend
+                "text": choice_data.get("text", "Continue"),
+                "description": choice_data.get("description", ""),
+                "impact": choice_data.get("description", "See what happens next")
+            }
+            choices_with_ids.append(choice_with_id)
+        
+        db.commit()
+        
         # Create response matching frontend Story interface
         response = {
-            "id": f"gen-{generation_request.child_id}-{generation_request.chapter_number}",
-            "title": generation_request.title or f"{generation_request.theme.capitalize()} Adventure",
+            "id": str(story.id),  # Use real database ID
+            "title": story.title,
             "content": clean_paragraphs,  # Array of clean paragraphs
-            "language": child.language_preference or "english",
-            "readingLevel": child.reading_level or "beginner",
+            "language": story.language,
+            "readingLevel": story.difficulty_level,
             "theme": generation_request.theme,
-            "choices": result.get("choices", []),
+            "choices": choices_with_ids,  # Choices with database IDs
             "isCompleted": False,
             "currentChapter": generation_request.chapter_number,
-            "totalChapters": 3,  # Default to 3 chapters
-            "createdAt": datetime.utcnow().isoformat(),
+            "totalChapters": story.total_chapters,
+            "createdAt": story.created_at.isoformat(),
             "success": result.get("success", True),
             "safety_score": result.get("safety_score", 1.0),
             "educational_elements": result.get("educational_elements", []),
-            "estimated_reading_time": result.get("estimated_reading_time", 5)
+            "estimated_reading_time": story.estimated_reading_time
         }
         
         return response
@@ -510,9 +557,18 @@ async def make_story_choice(
             )
         
         # Process the choice
+        # Convert string choice_id to integer for database lookup
+        try:
+            choice_id = int(choice_request.choice_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid choice ID format"
+            )
+            
         result = session_service.make_story_choice(
             session_id,
-            choice_request.choice_id,
+            choice_id,
             choice_request.option_index
         )
         

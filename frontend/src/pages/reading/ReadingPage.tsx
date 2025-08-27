@@ -1,14 +1,46 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStoryStore } from '../../stores/storyStore'
 import { useChildStore } from '../../stores/childStore'
 
 const ReadingPage: React.FC = () => {
   const navigate = useNavigate()
-  const { currentStory, makeChoice, isLoading } = useStoryStore()
+  const { currentStory, makeChoice, isLoading, startSession } = useStoryStore()
   const { currentChild } = useChildStore()
   const [currentParagraph, setCurrentParagraph] = useState(0)
   const [isReading, setIsReading] = useState(false)
+  const [sessionId, setSessionId] = useState<string | null>(null)
+
+  // Create a reading session when the component loads
+  useEffect(() => {
+    const createSession = async () => {
+      if (currentStory && currentChild && !sessionId) {
+        try {
+          console.log('Creating session for story:', currentStory.id, 'child:', currentChild.id)
+          const sessionResponse = await startSession({
+            storyId: currentStory.id,
+            childId: currentChild.id
+          })
+          console.log('Session response:', sessionResponse)
+          // Handle both possible response formats
+          let actualSessionId: string
+          if (sessionResponse.session) {
+            // Expected format: { session: StorySession, story: Story }
+            actualSessionId = sessionResponse.session.id
+          } else {
+            // Direct session format: StorySession
+            actualSessionId = sessionResponse.id
+          }
+          console.log('Setting session ID:', actualSessionId)
+          setSessionId(actualSessionId)
+        } catch (error) {
+          console.error('Failed to create story session:', error)
+        }
+      }
+    }
+
+    createSession()
+  }, [currentStory, currentChild, sessionId, startSession])
 
   if (!currentStory || !currentChild) {
     return (
@@ -23,13 +55,22 @@ const ReadingPage: React.FC = () => {
   }
 
   const handleChoice = async (choiceId: string) => {
+    console.log('Making choice with sessionId:', sessionId, 'choiceId:', choiceId)
+    
+    if (!sessionId) {
+      console.error('No session ID available for making choice')
+      alert('Session not ready yet. Please wait a moment and try again.')
+      return
+    }
+
     try {
-      await makeChoice('1', {
+      await makeChoice(sessionId, {
         choiceId: choiceId,
         timestamp: new Date().toISOString()
-      }) // Using session ID '1' as placeholder
+      })
       setCurrentParagraph(0) // Reset to beginning of new content
     } catch (error) {
+      console.error('Choice making failed:', error)
       // Error is handled by the store
     }
   }
@@ -166,6 +207,10 @@ const ReadingPage: React.FC = () => {
                   ? 'מה תרצה לעשות?' 
                   : 'What would you like to do?'}
               </h3>
+              {/* Debug info */}
+              <div className="text-xs text-gray-500 mb-2">
+                Session: {sessionId || 'Creating...'}
+              </div>
               <div className="grid gap-4">
                 {currentStory.choices.map(choice => (
                   <button

@@ -129,8 +129,12 @@ class StoryGenerationResponse(BaseModel):
 
 class ChoiceSelectionRequest(BaseModel):
     """Schema for making a story choice."""
-    choice_id: int
-    option_index: int
+    choice_id: str = Field(alias="choiceId")
+    timestamp: Optional[str] = None
+    option_index: Optional[int] = Field(default=0, alias="optionIndex")
+    
+    class Config:
+        populate_by_name = True
 
 
 class StoryRecommendation(BaseModel):
