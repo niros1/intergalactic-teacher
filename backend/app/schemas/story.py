@@ -69,9 +69,20 @@ class StoryWithChoices(StoryResponse):
         from_attributes = True
 
 
+class SimpleChoice(BaseModel):
+    """Simplified choice schema for frontend."""
+    id: str
+    text: str
+    impact: str = "normal"
+    nextChapter: Optional[int] = None
+    
+    class Config:
+        from_attributes = True
+
+
 class StoryWithProgress(StoryResponse):
     """Schema for story with reading progress."""
-    choices: List['ChoiceResponse'] = []
+    choices: List[SimpleChoice] = []
     current_chapter: int = 1
     is_completed: bool = False
     completion_percentage: int = 0

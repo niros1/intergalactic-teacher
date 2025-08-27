@@ -218,12 +218,63 @@ class StoryService:
                 StorySession.story_id == story.id
             ).order_by(StorySession.last_accessed.desc()).first()
             
+            # Get the content for the current chapter
+            current_chapter = session.current_chapter if session else 1
+            story_content = story.content
+            
+            # Split content by chapters if it contains chapter markers
+            if "\n\n---\n\n" in story_content:
+                chapters = story_content.split("\n\n---\n\n")
+                # Get the content for the current chapter (0-indexed)
+                if current_chapter <= len(chapters):
+                    chapter_content = chapters[current_chapter - 1]
+                else:
+                    # If we're beyond available chapters, use the last one
+                    chapter_content = chapters[-1] if chapters else story_content
+            else:
+                # No chapter markers, use full content
+                chapter_content = story_content
+            
+            # Get choices for current chapter if they exist
+            choices_data = []
+            if story.has_choices and story.choices:
+                # Get choices for the current chapter
+                for choice in story.choices:
+                    if choice.chapter_number == current_chapter:
+                        # Add individual choice options if they exist
+                        if choice.choices_data and isinstance(choice.choices_data, list):
+                            # choices_data is a JSON array of choice options
+                            for idx, option in enumerate(choice.choices_data):
+                                if isinstance(option, dict) and 'text' in option:
+                                    choices_data.append({
+                                        'id': f"{choice.id}_{idx}",
+                                        'text': option.get('text', ''),
+                                        'impact': option.get('impact', 'normal'),
+                                        'nextChapter': current_chapter + 1 if current_chapter < story.total_chapters else None
+                                    })
+                                elif isinstance(option, str):
+                                    # If option is just a string, use it as text
+                                    choices_data.append({
+                                        'id': f"{choice.id}_{idx}",
+                                        'text': option,
+                                        'impact': 'normal',
+                                        'nextChapter': current_chapter + 1 if current_chapter < story.total_chapters else None
+                                    })
+                        elif not choice.choices_data:
+                            # If no choices_data array, use the question as single choice
+                            choices_data.append({
+                                'id': str(choice.id),
+                                'text': choice.question,
+                                'impact': 'normal',
+                                'nextChapter': current_chapter + 1 if current_chapter < story.total_chapters else None
+                            })
+            
             # Convert to dict and add progress information
             story_dict = {
                 'id': story.id,
                 'title': story.title,
                 'description': story.description,
-                'content': story.content,
+                'content': chapter_content,  # Now returns only current chapter content
                 'language': story.language,
                 'difficulty_level': story.difficulty_level,
                 'themes': story.themes,
@@ -236,7 +287,7 @@ class StoryService:
                 'content_safety_score': story.content_safety_score,
                 'is_published': story.is_published,
                 'created_at': story.created_at,
-                'choices': [],  # Add choices if needed
+                'choices': choices_data,  # Now includes actual choices
                 'current_chapter': session.current_chapter if session else 1,
                 'is_completed': session.is_completed if session else False,
                 'completion_percentage': session.completion_percentage if session else 0,

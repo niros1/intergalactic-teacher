@@ -16,8 +16,9 @@ help:
 	@echo "  backend     - Start backend API server"
 	@echo ""
 	@echo "Database Commands:"
-	@echo "  db-migrate  - Run database migrations"
-	@echo "  db-reset    - Reset database and run migrations"
+	@echo "  db-migrate     - Run database migrations"
+	@echo "  db-reset       - Reset database and run migrations"
+	@echo "  clean-stories  - Delete all stories & sessions (keeps users/children)"
 	@echo ""
 	@echo "Utility Commands:"
 	@echo "  logs        - Show logs from all services"
@@ -75,6 +76,11 @@ db-reset:
 	cd backend && docker-compose up -d api
 	@sleep 5
 	@make db-migrate
+
+clean-stories:
+	@echo "Cleaning all stories and related data (preserving users and children)..."
+	@docker exec -i intergalactic_db psql -U intergalactic -d intergalactic_teacher < backend/scripts/clean_stories.sql
+	@echo "Stories cleanup complete!"
 
 # Utility commands
 logs:
