@@ -33,8 +33,15 @@ class AuthService {
       api.post<ApiResponse<AuthResponse>>('/auth/login', credentials)
     )
 
+    console.log('[AuthService] Login response:', response)
+    
     // Store tokens after successful login
-    TokenManager.setTokens(response.accessToken, response.refreshToken)
+    if (response.accessToken && response.refreshToken) {
+      TokenManager.setTokens(response.accessToken, response.refreshToken)
+      console.log('[AuthService] Tokens stored successfully')
+    } else {
+      console.error('[AuthService] Missing tokens in login response')
+    }
     
     return response
   }
@@ -109,7 +116,7 @@ class AuthService {
    */
   async getCurrentUser(): Promise<User> {
     return await apiRequest<User>(() =>
-      api.get<ApiResponse<User>>('/auth/me')
+      api.get<ApiResponse<User>>('/users/me')
     )
   }
 
@@ -118,7 +125,7 @@ class AuthService {
    */
   async updateProfile(updates: Partial<User>): Promise<User> {
     return await apiRequest<User>(() =>
-      api.put<ApiResponse<User>>('/auth/profile', updates)
+      api.put<ApiResponse<User>>('/users/me', updates)
     )
   }
 
@@ -128,6 +135,13 @@ class AuthService {
   isAuthenticated(): boolean {
     const accessToken = TokenManager.getAccessToken()
     const refreshToken = TokenManager.getRefreshToken()
+    
+    console.log('[AuthService] Token check:', {
+      hasAccessToken: !!accessToken,
+      hasRefreshToken: !!refreshToken,
+      accessTokenExpired: accessToken ? TokenManager.isTokenExpired(accessToken) : 'N/A',
+      refreshTokenExpired: refreshToken ? TokenManager.isTokenExpired(refreshToken) : 'N/A'
+    })
     
     // Check if we have tokens and at least one is not expired
     return !!(
@@ -162,13 +176,19 @@ class AuthService {
    * Returns user data if tokens are valid, null otherwise
    */
   async initializeAuth(): Promise<User | null> {
+    console.log('[AuthService] Checking if authenticated...')
     if (!this.isAuthenticated()) {
+      console.log('[AuthService] Not authenticated (no valid tokens)')
       return null
     }
 
     try {
-      return await this.getCurrentUser()
+      console.log('[AuthService] Fetching current user...')
+      const user = await this.getCurrentUser()
+      console.log('[AuthService] Successfully fetched user:', user)
+      return user
     } catch (error) {
+      console.error('[AuthService] Failed to get current user:', error)
       // If getting current user fails, clear invalid tokens
       this.clearAuthData()
       return null

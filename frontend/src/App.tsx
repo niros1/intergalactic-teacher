@@ -19,12 +19,21 @@ import Layout from './components/layout/Layout'
 import AuthLayout from './components/layout/AuthLayout'
 
 function App() {
-  const { isAuthenticated, initializeAuth } = useAuthStore()
+  const { isAuthenticated, isLoading, initializeAuth } = useAuthStore()
 
   useEffect(() => {
     // Initialize auth state from localStorage
     initializeAuth()
   }, [initializeAuth])
+
+  // Show loading spinner while checking authentication
+  if (isLoading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <div>Loading...</div>
+      </div>
+    )
+  }
 
   return (
     <ErrorBoundary>

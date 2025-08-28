@@ -1,23 +1,34 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuthStore } from '../../stores/authStore'
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate()
-  const { login, isLoading, error, clearError } = useAuthStore()
+  const { login, isLoading, error, clearError, isAuthenticated } = useAuthStore()
   const [formData, setFormData] = useState({
     email: '',
     password: '',
   })
+
+  // Navigate when authentication state changes
+  useEffect(() => {
+    if (isAuthenticated) {
+      console.log('[LoginPage] Authenticated state changed, navigating to dashboard...')
+      navigate('/child/dashboard')
+    }
+  }, [isAuthenticated, navigate])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     clearError()
     
     try {
+      console.log('[LoginPage] Attempting login...')
       await login(formData)
-      navigate('/child/dashboard')
+      console.log('[LoginPage] Login completed')
+      // Navigation will happen in useEffect when isAuthenticated changes
     } catch (error) {
+      console.error('[LoginPage] Login failed:', error)
       // Error is handled by the store
     }
   }

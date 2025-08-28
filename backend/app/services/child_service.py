@@ -128,7 +128,11 @@ class ChildService:
     def check_child_access(self, child_id: int, parent_id: int) -> bool:
         """Check if parent has access to child profile."""
         child = self.get_child_by_id(child_id)
-        return child is not None and child.parent_id == parent_id
+        if child is None:
+            print(f"[ChildService] Child {child_id} not found")
+            return False
+        print(f"[ChildService] Checking access: child.parent_id={child.parent_id} (type: {type(child.parent_id)}), parent_id={parent_id} (type: {type(parent_id)})")
+        return child.parent_id == parent_id
     
     def update_reading_progress(
         self,

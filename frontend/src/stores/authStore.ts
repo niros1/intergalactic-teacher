@@ -18,23 +18,28 @@ interface AuthStore extends AuthState {
 export const useAuthStore = create<AuthStore>((set) => ({
   user: null,
   isAuthenticated: false,
-  isLoading: false,
+  isLoading: true, // Start with loading true since we need to check auth on mount
   error: null,
 
   login: async (credentials: LoginRequest) => {
+    console.log('[AuthStore] Starting login...')
     set({ isLoading: true, error: null })
     try {
       const authResponse = await authService.login(credentials)
+      console.log('[AuthStore] Got auth response:', authResponse)
       
       set({ 
         user: authResponse.user, 
         isAuthenticated: true, 
         isLoading: false 
       })
+      console.log('[AuthStore] Auth state updated')
       
       // Store user data in localStorage
       localStorage.setItem('user', JSON.stringify(authResponse.user))
+      console.log('[AuthStore] User data stored in localStorage')
     } catch (error) {
+      console.error('[AuthStore] Login failed:', error)
       const errorMessage = getErrorMessage(error)
       set({ 
         error: errorMessage, 
@@ -126,10 +131,21 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 
   initializeAuth: async () => {
+    console.log('[AuthStore] Initializing auth...')
+    // Don't override if we're already authenticated (e.g., from a recent login)
+    const currentState = useAuthStore.getState()
+    if (currentState.isAuthenticated) {
+      console.log('[AuthStore] Already authenticated, skipping initialization')
+      set({ isLoading: false })
+      return
+    }
+    
     set({ isLoading: true })
     try {
       const user = await authService.initializeAuth()
+      console.log('[AuthStore] User from initializeAuth:', user)
       if (user) {
+        console.log('[AuthStore] Setting authenticated state with user:', user)
         set({ 
           user, 
           isAuthenticated: true, 
@@ -137,6 +153,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
         })
         localStorage.setItem('user', JSON.stringify(user))
       } else {
+        console.log('[AuthStore] No user returned, clearing auth')
         set({ 
           user: null, 
           isAuthenticated: false, 
@@ -145,6 +162,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
         localStorage.removeItem('user')
       }
     } catch (error) {
+      console.error('[AuthStore] Error during initializeAuth:', error)
       set({ 
         user: null, 
         isAuthenticated: false, 
@@ -173,12 +191,3 @@ export const useAuthStore = create<AuthStore>((set) => ({
     }
   },
 }))
-
-// Initialize auth state - this will validate tokens and get fresh user data
-if (authService.isAuthenticated()) {
-  // Use initializeAuth to validate tokens and get fresh user data
-  useAuthStore.getState().initializeAuth()
-} else {
-  // Clear any stale data
-  localStorage.removeItem('user')
-}

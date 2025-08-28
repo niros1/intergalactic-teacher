@@ -3,8 +3,8 @@ import type { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'a
 import type { ApiResponse } from '../types'
 
 // Base API configuration
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001/api/v1'
-console.log(`BASE_URL: ${BASE_URL}`);
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
+console.log(`[API] BASE_URL: ${BASE_URL}`);
 
 // Custom error class for API errors
 export class ApiResponseError extends Error {
@@ -71,8 +71,12 @@ const createApiInstance = (): AxiosInstance => {
   instance.interceptors.request.use(
     (config: InternalAxiosRequestConfig) => {
       const token = TokenManager.getAccessToken()
+      console.log('[API] Request to:', config.url, 'Token exists:', !!token)
       if (token && !TokenManager.isTokenExpired(token)) {
         config.headers.Authorization = `Bearer ${token}`
+        console.log('[API] Authorization header set')
+      } else if (token) {
+        console.log('[API] Token expired, not setting Authorization header')
       }
       return config
     },
@@ -177,16 +181,8 @@ export const apiRequest = async <T>(
     const response = await requestFn()
 
     // Handle successful response
-    const responseData = response.data as any
-    if (responseData && responseData.success !== false) {
-      return (responseData.data || responseData) as T
-    } else {
-      throw new ApiResponseError(
-        response.data.message || 'Request failed',
-        'API_ERROR',
-        response.data
-      )
-    }
+    // The backend returns data directly, not wrapped in a success/data structure
+    return response.data as T
   } catch (error) {
     if (error instanceof ApiResponseError) {
       throw error

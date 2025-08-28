@@ -1,23 +1,34 @@
 // Core entity types
 export interface User {
-  id: string
+  id: number
   email: string
   name: string
-  createdAt: string
-  updatedAt: string
+  is_active: boolean
+  is_verified: boolean
+  created_at: string
+  updated_at: string
+  last_login?: string
+  children?: Child[]
 }
 
 export interface Child {
-  id: string
-  parentId: string
+  id: number
+  parent_id: number
   name: string
   age: number
-  readingLevel: ReadingLevel
-  language: Language
+  reading_level: string
+  language_preference: string
   interests: string[]
-  profilePicture?: string
-  createdAt: string
-  updatedAt: string
+  avatar_url?: string
+  total_stories_completed: number
+  total_reading_time: number
+  current_reading_streak: number
+  longest_reading_streak: number
+  vocabulary_words_learned: number
+  reading_level_score: number
+  created_at: string
+  updated_at: string
+  last_active: string
 }
 
 export interface Story {
@@ -138,18 +149,18 @@ export interface RefreshTokenRequest {
 export interface CreateChildRequest {
   name: string
   age: number
-  readingLevel: ReadingLevel
-  language: Language
+  reading_level: ReadingLevel
+  language_preference: Language
   interests: string[]
-  profilePicture?: string
+  avatar_url?: string
 }
 
 export interface UpdateChildRequest {
   name?: string
   age?: number
-  language?: Language
+  language_preference?: Language
   interests?: string[]
-  profilePicture?: string
+  avatar_url?: string
 }
 
 export interface ChildWithProgress extends Child {
