@@ -66,7 +66,7 @@ const DashboardPage: React.FC = () => {
         language: currentChild.language,
         readingLevel: currentChild.readingLevel,
       })
-      navigate('/reading')
+      navigate('/chat-reading')
     } catch (error) {
       // Error is handled by the store
     }
@@ -74,7 +74,7 @@ const DashboardPage: React.FC = () => {
 
   const handleContinueStory = () => {
     if (currentStory) {
-      navigate('/reading')
+      navigate('/chat-reading')
     }
   }
 

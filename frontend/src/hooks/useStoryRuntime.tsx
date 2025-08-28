@@ -10,7 +10,6 @@ interface StoryMessage {
   createdAt: Date;
   metadata?: {
     chapterNumber?: number;
-    paragraphIndex?: number;
     storyId?: string;
     choices?: Choice[];
   };
@@ -18,9 +17,9 @@ interface StoryMessage {
 
 interface StoryRuntimeState {
   messages: StoryMessage[];
-  currentParagraphIndex: number;
   isLoading: boolean;
   sessionId: string | null;
+  isInitialized: boolean;
 }
 
 export const useStoryRuntime = () => {
@@ -29,14 +28,14 @@ export const useStoryRuntime = () => {
   
   const [state, setState] = useState<StoryRuntimeState>({
     messages: [],
-    currentParagraphIndex: 0,
     isLoading: false,
     sessionId: null,
+    isInitialized: false,
   });
 
   // Initialize story session and first message
   const initializeStory = useCallback(async () => {
-    if (!currentStory || !currentChild || state.sessionId) return;
+    if (!currentStory || !currentChild || state.sessionId || state.isInitialized) return;
 
     try {
       setState(prev => ({ ...prev, isLoading: true }));
@@ -69,65 +68,52 @@ export const useStoryRuntime = () => {
         ...prev,
         messages: [welcomeMessage],
         sessionId,
-        isLoading: false
+        isLoading: false,
+        isInitialized: true
       }));
 
-      // Auto-send first paragraph after welcome
-      setTimeout(() => {
-        sendNextParagraph();
-      }, 1500);
+      // Don't auto-send first chapter here - let the content watcher handle it
 
     } catch (error) {
       console.error('Failed to initialize story:', error);
       setState(prev => ({ ...prev, isLoading: false }));
     }
-  }, [currentStory, currentChild, startSession, state.sessionId]);
+  }, [currentStory, currentChild, startSession, state.sessionId, state.isInitialized]);
 
-  // Send next story paragraph
-  const sendNextParagraph = useCallback(() => {
-    if (!currentStory || !currentStory.content) return;
+  // Send current chapter as single chat message
+  const sendCurrentChapter = useCallback(() => {
+    if (!currentStory || !currentStory.content || currentStory.content.length === 0) return;
 
-    const { currentParagraphIndex } = state;
-    if (currentParagraphIndex >= currentStory.content.length) return;
+    // Combine all paragraphs into single chat message
+    const chapterText = Array.isArray(currentStory.content) 
+      ? currentStory.content.join('\n\n')
+      : currentStory.content;
 
-    const paragraphText = currentStory.content[currentParagraphIndex];
-    const isLastParagraph = currentParagraphIndex === currentStory.content.length - 1;
-
-    const messageId = `story-${currentStory.currentChapter}-${currentParagraphIndex}`;
+    const messageId = `chapter-${currentStory.currentChapter}`;
     
-    const newMessage: StoryMessage = {
+    const chapterMessage: StoryMessage = {
       id: messageId,
       role: 'assistant',
-      content: [{ type: 'text', text: paragraphText }],
+      content: [{ type: 'text', text: chapterText }],
       createdAt: new Date(),
       metadata: {
         storyId: currentStory.id,
-        chapterNumber: currentStory.currentChapter,
-        paragraphIndex: currentParagraphIndex,
-        ...(isLastParagraph && currentStory.choices && currentStory.choices.length > 0 
-          ? { choices: currentStory.choices }
-          : {})
+        chapterNumber: currentStory.currentChapter
       }
     };
 
     setState(prev => ({
       ...prev,
-      messages: [...prev.messages, newMessage],
-      currentParagraphIndex: currentParagraphIndex + 1
+      messages: [...prev.messages, chapterMessage]
     }));
 
-    // If it's the last paragraph and has choices, send choice options
-    if (isLastParagraph && currentStory.choices && currentStory.choices.length > 0) {
+    // Send choices if available
+    if (currentStory.choices && currentStory.choices.length > 0) {
       setTimeout(() => {
         sendChoiceOptions(currentStory.choices!);
       }, 1000);
-    } else if (!isLastParagraph) {
-      // Auto-send next paragraph after a delay
-      setTimeout(() => {
-        sendNextParagraph();
-      }, 2000);
     }
-  }, [currentStory, state.currentParagraphIndex]);
+  }, [currentStory]);
 
   // Send choice options
   const sendChoiceOptions = useCallback((choices: Choice[]) => {
@@ -170,29 +156,25 @@ export const useStoryRuntime = () => {
         messages: [...prev.messages, userMessage]
       }));
 
-      // Make the choice via the story store
+      // Make the choice via the story store - this will generate next chapter
       await makeChoice(state.sessionId, {
         choiceId,
         timestamp: new Date().toISOString()
       });
 
-      // Reset paragraph index for new chapter
-      setState(prev => ({
-        ...prev,
-        currentParagraphIndex: 0,
-        isLoading: false
-      }));
+      setState(prev => ({ ...prev, isLoading: false }));
 
-      // Start sending new chapter content
+      // The makeChoice call will update currentStory in the store with new chapter content
+      // We need to listen for that change and send the new chapter
       setTimeout(() => {
-        sendNextParagraph();
-      }, 500);
+        sendCurrentChapter();
+      }, 1000);
 
     } catch (error) {
       console.error('Failed to make choice:', error);
       setState(prev => ({ ...prev, isLoading: false }));
     }
-  }, [state.sessionId, makeChoice, sendNextParagraph]);
+  }, [state.sessionId, makeChoice, sendCurrentChapter]);
 
   // Simple runtime object for assistant-ui
   const runtime = useMemo(() => {
@@ -219,11 +201,19 @@ export const useStoryRuntime = () => {
             }
           }
 
-          // Handle "continue story" messages
-          if (content.toLowerCase().includes('continue') || 
+          // Handle "start story" messages (yes, ready, continue, etc.)
+          if (content.toLowerCase().includes('yes') ||
+              content.toLowerCase().includes('ready') ||
+              content.toLowerCase().includes('start') ||
+              content.toLowerCase().includes('begin') ||
+              content.toLowerCase().includes('continue') || 
               content.toLowerCase().includes('next') ||
+              content.toLowerCase().includes('go') ||
+              content.toLowerCase().includes('כן') ||
+              content.toLowerCase().includes('מוכן') ||
+              content.toLowerCase().includes('התחל') ||
               content.toLowerCase().includes('המשך')) {
-            sendNextParagraph();
+            sendCurrentChapter();
           }
         }
       },
@@ -235,14 +225,35 @@ export const useStoryRuntime = () => {
         }
       }
     };
-  }, [state, isLoading, handleChoice, sendNextParagraph]);
+  }, [state, isLoading, handleChoice, sendCurrentChapter]);
 
   // Auto-initialize when story is available
   useEffect(() => {
-    if (currentStory && currentChild && !state.sessionId) {
+    if (currentStory && currentChild && !state.sessionId && !state.isInitialized) {
       initializeStory();
     }
-  }, [currentStory, currentChild, state.sessionId, initializeStory]);
+  }, [currentStory, currentChild, state.sessionId, state.isInitialized, initializeStory]);
+
+  // Watch for story content changes (new chapters from backend)
+  useEffect(() => {
+    if (currentStory && currentStory.content && state.sessionId) {
+      // Check if we have messages and if the latest chapter is already displayed
+      const lastStoryMessage = state.messages
+        .filter(msg => msg.metadata?.chapterNumber)
+        .pop();
+      
+      const currentChapterInMessages = lastStoryMessage?.metadata?.chapterNumber || 0;
+      
+      // If we have a new chapter from backend, send it to chat
+      if (currentStory.currentChapter > currentChapterInMessages) {
+        // Add a delay for better UX, especially for first chapter after welcome
+        const delay = state.messages.length === 1 ? 1500 : 500; // Longer delay after welcome
+        setTimeout(() => {
+          sendCurrentChapter();
+        }, delay);
+      }
+    }
+  }, [currentStory?.currentChapter, currentStory?.content, state.sessionId, state.messages, sendCurrentChapter]);
 
   return runtime;
 };
