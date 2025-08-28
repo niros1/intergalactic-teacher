@@ -124,14 +124,14 @@ const DashboardPage: React.FC = () => {
                       : `Chapter ${story.currentChapter} of ${story.totalChapters}`}
                   </p>
                   <button 
-                    className="btn-success text-sm"
+                    className="btn-primary text-sm w-full flex items-center justify-center gap-2"
                     onClick={() => {
-                      // Set as current story and navigate to reading
+                      // Set as current story and navigate to chat reading
                       useStoryStore.getState().setCurrentStory(story)
-                      navigate('/reading')
+                      navigate('/chat-reading')
                     }}
                   >
-                    {currentChild.language === 'hebrew' ? 'המשך' : 'Continue'}
+                    💬 {currentChild.language === 'hebrew' ? 'המשך' : 'Continue'}
                   </button>
                 </div>
               ))}
@@ -187,14 +187,14 @@ const DashboardPage: React.FC = () => {
                     {currentChild.language === 'hebrew' ? 'הושלם' : 'Completed'}
                   </p>
                   <button 
-                    className="btn-secondary text-sm"
+                    className="btn-secondary text-sm w-full flex items-center justify-center gap-2"
                     onClick={() => {
-                      // Set as current story and navigate to reading
+                      // Set as current story and navigate to chat reading
                       useStoryStore.getState().setCurrentStory(story)
-                      navigate('/reading')
+                      navigate('/chat-reading')
                     }}
                   >
-                    {currentChild.language === 'hebrew' ? 'קרא שוב' : 'Read Again'}
+                    💬 {currentChild.language === 'hebrew' ? 'קרא שוב' : 'Read Again'}
                   </button>
                 </div>
               ))}

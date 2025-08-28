@@ -59,26 +59,33 @@ We empower parents and educators to unlock every child's learning potential thro
 ## 3. Core Features & Functionality
 
 ### Phase 1: Foundation (MVP)
-**Interactive Story Engine**
-- AI-generated stories with branching narratives
-- Reading comprehension questions embedded in stories
-- Vocabulary building exercises
-- Story influence through child choices
-- Progress tracking and difficulty adaptation
+**Chat-Based Interactive Story Engine**
+- ChatGPT-like conversational interface using assistant-ui library
+- AI-generated stories delivered through natural conversation
+- Story progression through interactive dialogue rather than chapter navigation
+- AI assistant offers 2-3 choice options through chat messages
+- Real-time story adaptation based on child's conversational choices
+- Reading comprehension questions embedded naturally in conversation
+- Vocabulary building through contextual explanations during chat
+- Progress tracking and difficulty adaptation maintained transparently
 
-**Core Reading Features**
-- Text-to-speech with natural voices
-- Adjustable reading speed and difficulty
-- Highlighted text following for reading along
-- Phonics support with pronunciation guides
-- Reading level assessment and progression
+**Enhanced Chat Reading Experience**
+- Text-to-speech integration within chat interface
+- Message-by-message audio playback
+- Adjustable reading speed and difficulty through chat preferences
+- Highlighted text following for each chat message
+- Phonics support with pronunciation guides on demand
+- Reading level assessment through conversational interaction
+- Natural conversation flow maintaining story immersion
 
-**Parent Dashboard**
-- Progress tracking and analytics
-- Time spent reading reports
-- Skill development insights
-- Content filtering and safety controls
-- Achievement celebration system
+**Parent Dashboard with Chat Insights**
+- Progress tracking through conversation analytics
+- Engagement metrics based on chat interaction patterns
+- Story choices and decision-making insights
+- Time spent in conversation reports
+- Skill development tracking through chat-based assessments
+- Content filtering and safety controls for chat environment
+- Achievement celebration system integrated with chat notifications
 
 ### Phase 2: Enhanced Experience
 **Visual Storytelling**
@@ -291,9 +298,10 @@ We empower parents and educators to unlock every child's learning potential thro
 ### Core Technology Stack
 **Frontend:**
 - React.js with TypeScript
+- Assistant-UI library for chat interface components
 - Progressive Web App (PWA) capabilities
-- Responsive design for all devices
-- Real-time synchronization
+- Responsive design optimized for chat interaction
+- Real-time chat synchronization and message streaming
 
 **Backend:**
 - Node.js/Express API
@@ -302,10 +310,12 @@ We empower parents and educators to unlock every child's learning potential thro
 - AI/ML pipeline integration
 
 **AI/ML Integration:**
-- OpenAI GPT for story generation
-- Speech recognition and synthesis APIs
-- Natural language processing for comprehension
-- Recommendation algorithms
+- OpenAI GPT for conversational story generation
+- Assistant-UI compatible AI response handling
+- Speech recognition for voice chat interactions
+- Text-to-speech synthesis for chat message playback
+- Natural language processing for conversational comprehension
+- Contextual recommendation algorithms through chat interaction
 
 **Infrastructure:**
 - Cloud hosting (AWS/Azure)

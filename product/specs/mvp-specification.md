@@ -1,7 +1,7 @@
 # MVP Specification - Interactive Reading Platform
 
 ## Overview
-A web-based prototype to test the concept of AI-powered interactive storytelling for children's reading improvement, focusing on Hebrew and English language support.
+A web-based prototype featuring a ChatGPT-like conversational interface to test AI-powered interactive storytelling for children's reading improvement, focusing on Hebrew and English language support. The platform transitions from traditional chapter-based navigation to a natural chat experience while preserving all existing story progression functionality.
 
 ## Target Users
 - **Primary**: Parents of children aged 7-12
@@ -10,12 +10,14 @@ A web-based prototype to test the concept of AI-powered interactive storytelling
 
 ## Core Features (Essential for Testing)
 
-### 1. Simple Story Generation
-- AI generates age-appropriate stories in Hebrew/English
-- 3-5 paragraphs per chapter
-- Simple multiple choice options (2-3 choices) to influence story direction
-- Basic difficulty adjustment (beginner/intermediate levels)
-- Stories should be engaging and educational
+### 1. Chat-Based Story Generation
+- AI generates age-appropriate stories delivered through conversational interface
+- Stories unfold naturally through chat messages (equivalent to 3-5 paragraphs per interaction)
+- AI assistant presents 2-3 choice options through chat messages instead of UI buttons
+- Children respond by typing or selecting suggested responses
+- Basic difficulty adjustment maintained through conversational context
+- Stories remain engaging and educational while feeling like natural conversation
+- Assistant-UI library integration for modern chat experience
 
 ### 2. Child Profile Setup
 - Name and age input
@@ -24,26 +26,30 @@ A web-based prototype to test the concept of AI-powered interactive storytelling
 - Interests selection (animals, adventure, fantasy, science, etc.)
 - Profile picture upload (optional)
 
-### 3. Reading Interface
-- Clean, large text display optimized for children
-- "Continue Story" and "Make Choice" buttons
-- Progress indicator (chapter 1 of 3, etc.)
-- Audio playback for stories (text-to-speech)
-- Highlighting current sentence being read
-- Bookmark/save progress functionality
+### 3. Chat Reading Interface
+- Clean, modern chat interface optimized for children using assistant-ui components
+- Natural conversation flow replacing "Continue Story" buttons
+- Chat-based choice selection with suggested response bubbles
+- Progress indicator integrated into chat history
+- Audio playback for individual chat messages (text-to-speech)
+- Message-by-message highlighting during audio playback
+- Automatic conversation state saving and restoration
+- Typing indicators and smooth message animations for engagement
 
 ### 4. Parent Dashboard (Basic)
-- Time spent reading per session
-- Stories completed count
-- Choices made by child with story impact
-- Simple engagement metrics (attention span, return visits)
-- Reading level progression tracking
+- Time spent in conversation per session
+- Chat interaction count and story completion metrics
+- Conversation choices made by child with story impact analysis
+- Chat engagement metrics (message frequency, response time, conversation length)
+- Reading level progression tracking through conversational assessment
+- Chat history overview with key decision points highlighted
 
-### 5. Basic Story Management
-- Start new story with theme selection
-- Continue existing story from last checkpoint
-- Story history (last 5 stories completed)
-- Favorite story marking
+### 5. Basic Conversation Management
+- Start new story conversation with theme selection through chat
+- Resume existing conversations from last message
+- Conversation history (last 5 story conversations completed)
+- Favorite conversation marking and quick restart
+- Chat export functionality for parents to review conversations
 
 ## Success Metrics for MVP Testing
 
@@ -87,11 +93,13 @@ A web-based prototype to test the concept of AI-powered interactive storytelling
 5. Does the reading level adaptation work effectively?
 
 ## Technical Constraints for MVP
-- Maximum 10 concurrent users
-- Stories limited to 3 chapters each
-- Basic responsive design (desktop and tablet)
+- Maximum 10 concurrent chat sessions
+- Conversations limited to equivalent of 3 chapters each
+- Chat interface responsive design (desktop and tablet)
+- Assistant-UI library integration with minimal custom components
 - Simple user management (no complex authentication)
 - Limited to 2 languages (Hebrew/English)
+- Backend API remains largely unchanged - chat interface as presentation layer
 
 ## Out of Scope for MVP
 - Advanced analytics and reporting

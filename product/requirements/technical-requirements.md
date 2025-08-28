@@ -13,11 +13,12 @@ Frontend (React SPA) → API Gateway → Backend Services → Database
 
 ### Core Technologies
 - **Framework**: React.js 18+ with TypeScript
-- **Styling**: Tailwind CSS for responsive design
-- **State Management**: Redux Toolkit or Zustand
+- **Chat Interface**: Assistant-UI library for conversational components
+- **Styling**: Tailwind CSS for responsive design with assistant-ui theming
+- **State Management**: Redux Toolkit or Zustand for app state + assistant-ui runtime
 - **Routing**: React Router v6
 - **Build Tool**: Vite or Create React App
-- **Testing**: Jest + React Testing Library
+- **Testing**: Jest + React Testing Library with assistant-ui component testing
 
 ### UI/UX Requirements
 - **Responsive Design**: Mobile-first approach supporting:
@@ -28,18 +29,21 @@ Frontend (React SPA) → API Gateway → Backend Services → Database
 - **Performance**: First Contentful Paint < 2 seconds
 - **Browser Support**: Chrome 90+, Firefox 88+, Safari 14+, Edge 90+
 
-### Child Interface Specifications
-- **Typography**: Minimum 18px font size, dyslexia-friendly fonts
-- **Color Contrast**: Minimum 4.5:1 ratio for normal text
-- **Touch Targets**: Minimum 44px x 44px for interactive elements
-- **Loading States**: Visual feedback for all async operations
-- **Error Handling**: Child-friendly error messages with illustrations
+### Chat Interface Specifications
+- **Typography**: Minimum 18px font size for chat messages, dyslexia-friendly fonts
+- **Color Contrast**: Minimum 4.5:1 ratio for chat text and UI elements
+- **Touch Targets**: Minimum 44px x 44px for chat input and suggested responses
+- **Chat Experience**: Smooth message animations, typing indicators, message streaming
+- **Loading States**: Chat-specific loading indicators (typing dots, message pending)
+- **Error Handling**: Contextual error messages integrated into chat conversation
+- **Accessibility**: Screen reader support for chat messages and navigation
 
-### Audio Features
-- **Text-to-Speech**: Web Speech API integration
-- **Voice Selection**: Multiple voice options per language
-- **Playback Controls**: Play, pause, speed adjustment (0.5x - 2x)
-- **Audio Feedback**: Click sounds and interaction confirmations
+### Audio Features in Chat
+- **Text-to-Speech**: Web Speech API integration for individual chat messages
+- **Voice Selection**: Multiple voice options per language accessible through chat settings
+- **Message Playback**: Play, pause, speed adjustment per message (0.5x - 2x)
+- **Chat Audio Controls**: Message-level audio controls, auto-play options
+- **Audio Feedback**: Subtle notification sounds for new messages and interactions
 
 ## Backend Requirements
 
@@ -87,11 +91,13 @@ POST /api/children
 PUT /api/children/:id
 DELETE /api/children/:id
 
-Story Management:
-GET /api/stories
-POST /api/stories/generate
-GET /api/stories/:id
-POST /api/stories/:id/choices
+Chat-Based Story Management:
+GET /api/conversations
+POST /api/conversations/start
+GET /api/conversations/:id
+POST /api/conversations/:id/message
+GET /api/conversations/:id/messages
+POST /api/conversations/:id/choices
 
 Analytics:
 GET /api/analytics/child/:id
@@ -107,14 +113,17 @@ POST /api/analytics/session
 
 ## AI/ML Integration
 
-### Story Generation
+### Conversational Story Generation
 - **Primary Provider**: OpenAI GPT-4 API
 - **Backup Provider**: Anthropic Claude API
+- **Assistant-UI Integration**: Compatible AI response handling and streaming
 - **Prompt Engineering**: Structured prompts for:
-  - Age-appropriate content generation
-  - Cultural sensitivity validation
-  - Educational objective integration
-  - Story branching and choice creation
+  - Conversational storytelling that feels natural
+  - Age-appropriate content generation through chat
+  - Cultural sensitivity validation in dialogue
+  - Educational objective integration through conversation
+  - Choice presentation through natural chat options
+  - Context maintenance across conversation history
 
 ### Content Safety
 - **Content Filtering**: AI-powered inappropriate content detection
@@ -180,10 +189,11 @@ POST /api/analytics/session
 ## Third-Party Integrations
 
 ### Required Integrations
-- **AI Content Generation**: OpenAI GPT-4 API
+- **AI Content Generation**: OpenAI GPT-4 API with streaming support
+- **Chat Interface**: Assistant-UI library (https://www.assistant-ui.com)
 - **Text-to-Speech**: Azure Speech Services
 - **Email Service**: SendGrid or AWS SES
-- **Analytics**: Google Analytics 4
+- **Analytics**: Google Analytics 4 with chat interaction tracking
 - **Payment Processing**: Stripe (future)
 
 ### Optional Integrations
@@ -191,6 +201,45 @@ POST /api/analytics/session
 - **Push Notifications**: Firebase Cloud Messaging (future)
 - **A/B Testing**: Optimizely or similar (future)
 - **Customer Support**: Intercom or Zendesk (future)
+
+## Chat Interface Implementation Requirements
+
+### Assistant-UI Library Integration
+- **Library Version**: Latest stable version of assistant-ui (https://www.assistant-ui.com)
+- **Component Architecture**: Leverage pre-built chat components with minimal customization
+- **Runtime Integration**: Implement assistant-ui runtime for conversation state management
+- **Message Streaming**: Real-time message streaming for natural conversation flow
+- **Thread Management**: Conversation thread persistence and restoration
+
+### Chat-Specific Technical Requirements
+- **Message Processing**: Handle both text and choice-based messages
+- **State Synchronization**: Real-time sync between chat state and backend story state
+- **Response Handling**: Process AI responses and format for chat display
+- **Choice Integration**: Transform story choices into natural chat response options
+- **Context Preservation**: Maintain conversation context across sessions
+- **Message History**: Efficient storage and retrieval of conversation history
+
+### Backend API Adaptations for Chat
+- **Minimal Changes Approach**: Preserve existing story logic and database schema
+- **Chat Wrapper Layer**: API layer that translates between chat interface and existing story engine
+- **Message Endpoints**: New endpoints for chat message handling while leveraging existing story generation
+- **Choice Mapping**: Transform existing choice system into conversational responses
+- **Session State**: Maintain conversation state while preserving existing progress tracking
+
+### Chat Experience Requirements
+- **Natural Flow**: Conversations should feel natural and engaging for children
+- **Choice Presentation**: AI presents 2-3 options naturally within conversation context
+- **Progress Indication**: Subtle progress tracking integrated into chat experience
+- **Audio Integration**: Seamless text-to-speech for individual messages
+- **Error Recovery**: Graceful handling of conversation interruptions or failures
+- **Responsive Design**: Chat interface optimized for all device sizes
+
+### Migration Strategy
+- **Phase 1**: Implement chat interface as new presentation layer over existing backend
+- **Phase 2**: Gradually optimize backend for chat-specific requirements
+- **Phase 3**: Full integration with enhanced conversational features
+- **Backward Compatibility**: Maintain ability to revert to chapter-based interface if needed
+- **Data Preservation**: Ensure all existing user data and progress remains intact
 
 ## Development Standards
 
@@ -202,11 +251,12 @@ POST /api/analytics/session
 - **Code Reviews**: Required for all production code
 
 ### Testing Strategy
-- **Unit Tests**: Jest for business logic testing
-- **Integration Tests**: Supertest for API testing
-- **End-to-End Tests**: Playwright or Cypress for user flows
-- **Load Testing**: Artillery or k6 for performance testing
-- **Security Testing**: OWASP ZAP for vulnerability scanning
+- **Unit Tests**: Jest for business logic and assistant-ui component testing
+- **Integration Tests**: Supertest for API testing including chat endpoints
+- **End-to-End Tests**: Playwright or Cypress for chat user flows and conversation testing
+- **Chat Experience Testing**: Specific tests for message streaming, choice selection, and conversation state
+- **Load Testing**: Artillery or k6 for chat concurrency and message performance
+- **Security Testing**: OWASP ZAP for vulnerability scanning including chat input validation
 
 ### Deployment Strategy
 - **Blue-Green Deployment**: Zero-downtime deployments

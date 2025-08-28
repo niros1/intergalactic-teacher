@@ -13,6 +13,7 @@ import RegisterPage from './pages/auth/RegisterPage'
 import SetupPage from './pages/child/SetupPage'
 import DashboardPage from './pages/child/DashboardPage'
 import ReadingPage from './pages/reading/ReadingPage'
+import ChatReadingPage from './pages/reading/ChatReadingPage'
 
 // Layout Components
 import Layout from './components/layout/Layout'
@@ -74,6 +75,15 @@ function App() {
           isAuthenticated ? (
             <Layout>
               <ReadingPage />
+            </Layout>
+          ) : (
+            <Navigate to="/auth/login" replace />
+          )
+        } />
+        <Route path="/chat-reading" element={
+          isAuthenticated ? (
+            <Layout>
+              <ChatReadingPage />
             </Layout>
           ) : (
             <Navigate to="/auth/login" replace />
