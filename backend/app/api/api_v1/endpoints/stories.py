@@ -172,18 +172,7 @@ async def generate_story(
                 detail="Child not found"
             )
         
-        # Check rate limiting for story generation
-        is_allowed, remaining = await redis_client.rate_limit_check(
-            f"story_generation:{current_user.id}",
-            limit=10,  # 10 generations per hour
-            window=3600
-        )
-        
-        if not is_allowed:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"Story generation rate limit exceeded. Try again later."
-            )
+        # Rate limiting disabled for development
         
         # Generate the story
         result = story_service.generate_personalized_story(
@@ -571,31 +560,31 @@ async def make_story_choice(
             )
         
         # Process the choice
-        # Handle special "continue" choice for advancing chapters without explicit choices
-        if choice_request.choice_id == "continue":
-            result = session_service.advance_to_next_chapter(session_id)
-            if not result["success"]:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=result.get("error", "Failed to advance to next chapter")
-                )
-            logger.info(f"Advanced to next chapter in session: {session_id}")
-            return result
+        # For dynamic story generation, we'll use advance_to_next_chapter for all choices
+        # The choice context will be preserved in the session for story generation
         
-        # Convert string choice_id to integer for database lookup
-        try:
-            choice_id = int(choice_request.choice_id)
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid choice ID format"
-            )
+        # Record the choice made (for context in next chapter generation)
+        session = session_service.get_session_by_id(session_id)
+        if session:
+            # Convert string choice_id to integer if possible, otherwise use special handling
+            try:
+                choice_id_int = int(choice_request.choice_id)
+                session.add_choice(choice_id_int, choice_request.option_index or 0)
+            except ValueError:
+                # Handle special choice IDs like "continue" by storing choice information
+                if not session.choices_made:
+                    session.choices_made = []
+                session.choices_made.append({
+                    "choice_id": choice_request.choice_id,  # Keep as string for special choices
+                    "option_index": choice_request.option_index or 0,
+                    "timestamp": choice_request.timestamp or datetime.utcnow().isoformat(),
+                })
             
-        result = session_service.make_story_choice(
-            session_id,
-            choice_id,
-            choice_request.option_index
-        )
+            # Commit the choice to database
+            session_service.db.commit()
+        
+        # Use dynamic chapter generation for all choices
+        result = session_service.advance_to_next_chapter(session_id)
         
         if not result["success"]:
             raise HTTPException(

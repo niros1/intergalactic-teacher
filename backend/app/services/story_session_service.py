@@ -233,13 +233,14 @@ class StorySessionService:
                 
                 for choice in choices_query:
                     if choice.choices_data:
-                        for option in enumerate(choice.choices_data):
-                            if isinstance(option[1], dict) and 'text' in option[1]:
+                        for option_index, option_data in enumerate(choice.choices_data):
+                            if isinstance(option_data, dict) and 'text' in option_data:
                                 new_choices.append({
                                     'id': str(choice.id),
-                                    'text': option[1].get('text', ''),
-                                    'impact': option[1].get('impact', 'normal'),
-                                    'description': option[1].get('description', '')
+                                    'option_index': option_index,
+                                    'text': option_data.get('text', ''),
+                                    'impact': option_data.get('impact', 'normal'),
+                                    'description': option_data.get('description', '')
                                 })
             
             result = {
@@ -328,13 +329,14 @@ class StorySessionService:
                 
                 for choice in choices_query:
                     if choice.choices_data:
-                        for option in enumerate(choice.choices_data):
-                            if isinstance(option[1], dict) and 'text' in option[1]:
+                        for option_index, option_data in enumerate(choice.choices_data):
+                            if isinstance(option_data, dict) and 'text' in option_data:
                                 new_choices.append({
                                     'id': str(choice.id),
-                                    'text': option[1].get('text', ''),
-                                    'impact': option[1].get('impact', 'normal'),
-                                    'description': option[1].get('description', '')
+                                    'option_index': option_index,
+                                    'text': option_data.get('text', ''),
+                                    'impact': option_data.get('impact', 'normal'),
+                                    'description': option_data.get('description', '')
                                 })
             
             # Update session

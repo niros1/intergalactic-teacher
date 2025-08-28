@@ -45,7 +45,7 @@ export const useStoryRuntime = () => {
         childId: currentChild.id
       });
 
-      const sessionId = sessionResponse.session ? sessionResponse.session.id : (sessionResponse as any).id;
+      const sessionId = sessionResponse.session ? sessionResponse.session.id.toString() : (sessionResponse as any).id.toString();
       
       // Create welcome message
       const welcomeMessage: StoryMessage = {
@@ -53,7 +53,7 @@ export const useStoryRuntime = () => {
         role: 'assistant',
         content: [{ 
           type: 'text', 
-          text: currentChild.language === 'hebrew' 
+          text: currentChild.language_preference === 'hebrew' 
             ? `היי ${currentChild.name}! בואו נתחיל את הסיפור "${currentStory.title}"! מוכנים להרפתקה? 🌟`
             : `Hi ${currentChild.name}! Let's start the story "${currentStory.title}"! Ready for an adventure? 🌟`
         }],
@@ -89,7 +89,7 @@ export const useStoryRuntime = () => {
       ? currentStory.content.join('\n\n')
       : currentStory.content;
 
-    const messageId = `chapter-${currentStory.currentChapter}`;
+    const messageId = `chapter-${currentStory.currentChapter}-${Date.now()}`;
     
     const chapterMessage: StoryMessage = {
       id: messageId,
@@ -117,7 +117,7 @@ export const useStoryRuntime = () => {
 
   // Send choice options
   const sendChoiceOptions = useCallback((choices: Choice[]) => {
-    const isHebrew = currentChild?.language === 'hebrew';
+    const isHebrew = currentChild?.language_preference === 'hebrew';
     
     const choiceMessage: StoryMessage = {
       id: `choices-${Date.now()}`,
@@ -137,7 +137,7 @@ export const useStoryRuntime = () => {
   }, [currentChild?.language]);
 
   // Handle user choice selection
-  const handleChoice = useCallback(async (choiceId: string, choiceText: string) => {
+  const handleChoice = useCallback(async (choiceId: string, optionIndex: number, choiceText: string) => {
     if (!state.sessionId) return;
 
     try {
@@ -159,6 +159,7 @@ export const useStoryRuntime = () => {
       // Make the choice via the story store - this will generate next chapter
       await makeChoice(state.sessionId, {
         choiceId,
+        optionIndex,
         timestamp: new Date().toISOString()
       });
 
@@ -196,7 +197,7 @@ export const useStoryRuntime = () => {
               c.text.includes(content) || content.includes(c.text)
             );
             if (choice) {
-              await handleChoice(choice.id, choice.text);
+              await handleChoice(choice.id, choice.option_index, choice.text);
               return;
             }
           }

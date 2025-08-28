@@ -17,20 +17,20 @@ const ChatReadingPage: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h1 className="heading-child">
-            {currentChild?.language === 'hebrew' ? 'טוען סיפור...' : 'Loading story...'}
+            {currentChild?.language_preference === 'hebrew' ? 'טוען סיפור...' : 'Loading story...'}
           </h1>
           <button
             onClick={() => navigate('/child/dashboard')}
             className="btn-secondary mt-4"
           >
-            {currentChild?.language === 'hebrew' ? '← חזור' : '← Back'}
+            {currentChild?.language_preference === 'hebrew' ? '← חזור' : '← Back'}
           </button>
         </div>
       </div>
     );
   }
 
-  const isHebrew = currentChild.language === 'hebrew';
+  const isHebrew = currentChild.language_preference === 'hebrew';
 
   const handleSendMessage = async () => {
     if (inputValue.trim() && runtime.append) {
