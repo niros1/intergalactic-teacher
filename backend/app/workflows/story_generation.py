@@ -3,6 +3,7 @@
 from typing import Any, Dict, List, TypedDict
 import json
 import logging
+import re
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_ollama import ChatOllama
@@ -189,7 +190,6 @@ def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
             
             # Try to extract story_content value if present
             if "story_content" in clean_content:
-                import re
                 # Try to extract content between quotes after story_content
                 match = re.search(r'"story_content"\s*:\s*"([^"]+)"', clean_content, re.DOTALL)
                 if match:

@@ -110,7 +110,14 @@ export const useStoryRuntime = () => {
     // Send choices if available
     if (currentStory.choices && currentStory.choices.length > 0) {
       setTimeout(() => {
-        sendChoiceOptions(currentStory.choices!);
+        // Check if choices for this chapter are already in messages
+        const hasChoicesForCurrentChapter = state.messages.some(msg => 
+          msg.metadata?.choices && msg.metadata?.chapterNumber === currentStory.currentChapter
+        );
+        
+        if (!hasChoicesForCurrentChapter) {
+          sendChoiceOptions(currentStory.choices!);
+        }
       }, 1000);
     }
   }, [currentStory]);
@@ -127,14 +134,14 @@ export const useStoryRuntime = () => {
         text: isHebrew ? 'מה תרצה לעשות?' : 'What would you like to do?'
       }],
       createdAt: new Date(),
-      metadata: { choices }
+      metadata: { choices, chapterNumber: currentStory?.currentChapter }
     };
 
     setState(prev => ({
       ...prev,
       messages: [...prev.messages, choiceMessage]
     }));
-  }, [currentChild?.language]);
+  }, [currentChild?.language_preference, currentStory?.currentChapter]);
 
   // Handle user choice selection
   const handleChoice = useCallback(async (choiceId: string, optionIndex: number, choiceText: string) => {
@@ -166,10 +173,7 @@ export const useStoryRuntime = () => {
       setState(prev => ({ ...prev, isLoading: false }));
 
       // The makeChoice call will update currentStory in the store with new chapter content
-      // We need to listen for that change and send the new chapter
-      setTimeout(() => {
-        sendCurrentChapter();
-      }, 1000);
+      // The useEffect watching currentStory changes will handle sending the new chapter automatically
 
     } catch (error) {
       console.error('Failed to make choice:', error);
