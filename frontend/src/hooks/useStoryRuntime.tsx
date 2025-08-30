@@ -42,7 +42,7 @@ export const useStoryRuntime = () => {
       
       const sessionResponse = await startSession({
         storyId: currentStory.id,
-        childId: currentChild.id
+        childId: currentChild.id.toString()
       });
 
       const sessionId = sessionResponse.session ? sessionResponse.session.id.toString() : (sessionResponse as any).id.toString();
@@ -64,15 +64,58 @@ export const useStoryRuntime = () => {
         }
       };
 
+      // For existing stories, load all previous chapters
+      const messagesToAdd: StoryMessage[] = [welcomeMessage];
+      
+      // If this is an existing story with content, add all chapters up to current
+      if (currentStory.content && currentStory.content.length > 0) {
+        // For now, add the current chapter content
+        // In a real scenario, we'd need to fetch all previous chapters from the backend
+        const chapterText = Array.isArray(currentStory.content) 
+          ? currentStory.content.join('\n\n')
+          : currentStory.content;
+        
+        const chapterMessage: StoryMessage = {
+          id: `chapter-${currentStory.currentChapter}-${Date.now()}`,
+          role: 'assistant',
+          content: [{ type: 'text', text: chapterText }],
+          createdAt: new Date(),
+          metadata: {
+            storyId: currentStory.id,
+            chapterNumber: currentStory.currentChapter
+          }
+        };
+        
+        messagesToAdd.push(chapterMessage);
+        
+        // Add choices if available
+        if (currentStory.choices && currentStory.choices.length > 0) {
+          const choiceMessage: StoryMessage = {
+            id: `choices-${Date.now()}`,
+            role: 'assistant',
+            content: [{ 
+              type: 'text', 
+              text: currentChild.language_preference === 'hebrew' ? 'מה תרצה לעשות?' : 'What would you like to do?'
+            }],
+            createdAt: new Date(),
+            metadata: { 
+              choices: currentStory.choices,
+              chapterNumber: currentStory.currentChapter
+            }
+          };
+          messagesToAdd.push(choiceMessage);
+        }
+      }
+
       setState(prev => ({
         ...prev,
-        messages: [welcomeMessage],
+        messages: messagesToAdd,
         sessionId,
         isLoading: false,
         isInitialized: true
       }));
 
-      // Don't auto-send first chapter here - let the content watcher handle it
+      // Don't auto-send first chapter here since we already added it
 
     } catch (error) {
       console.error('Failed to initialize story:', error);
@@ -285,7 +328,7 @@ export const useStoryRuntime = () => {
 
   // Watch for story content changes (new chapters from backend)
   useEffect(() => {
-    if (currentStory && currentStory.content && state.sessionId) {
+    if (currentStory && currentStory.content && state.sessionId && state.isInitialized) {
       // Check if we have messages and if the latest chapter is already displayed
       const lastStoryMessage = state.messages
         .filter(msg => msg.metadata?.chapterNumber)
@@ -293,7 +336,7 @@ export const useStoryRuntime = () => {
       
       const currentChapterInMessages = lastStoryMessage?.metadata?.chapterNumber || 0;
       
-      // If we have a new chapter from backend, send it to chat
+      // If we have a new chapter from backend that's not yet displayed, send it to chat
       if (currentStory.currentChapter > currentChapterInMessages) {
         // Add a delay for better UX, especially for first chapter after welcome
         const delay = state.messages.length === 1 ? 1500 : 500; // Longer delay after welcome
@@ -302,7 +345,7 @@ export const useStoryRuntime = () => {
         }, delay);
       }
     }
-  }, [currentStory?.currentChapter, currentStory?.content, state.sessionId, state.messages, sendCurrentChapter]);
+  }, [currentStory?.currentChapter, currentStory?.content, state.sessionId, state.messages, state.isInitialized, sendCurrentChapter]);
 
   return runtime;
 };
