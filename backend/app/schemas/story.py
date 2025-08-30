@@ -46,7 +46,7 @@ class StoryCreate(BaseModel):
 class StoryResponse(StoryBase):
     """Schema for story response."""
     id: int
-    content: Union[str, List[str]]  # Support both string and array for backward compatibility
+    # content field removed - now using story_chapters
     target_age_min: int
     target_age_max: int
     estimated_reading_time: int
@@ -118,7 +118,7 @@ class StoryBranchResponse(BaseModel):
     choice_id: int
     choice_option_index: int
     branch_name: Optional[str]
-    content: str
+    content: str  # Note: This is branch content, not story content
     leads_to_chapter: Optional[int]
     leads_to_choice_id: Optional[int]
     is_ending: bool

@@ -218,7 +218,7 @@ async def generate_story(
         from app.models.story import Story, Choice, StoryBranch
         story = Story(
             title=generation_request.title or f"{generation_request.theme.capitalize()} Adventure",
-            content=story_content,
+            # content field removed - story content now in story_chapters table
             language=child.language_preference or "english",
             difficulty_level=child.reading_level or "beginner", 
             themes=[generation_request.theme],
@@ -234,6 +234,16 @@ async def generate_story(
         
         db.add(story)
         db.flush()  # Get the story ID
+        
+        # Create StoryChapter record for the generated content
+        from app.models.story_chapter import StoryChapter
+        chapter = StoryChapter(
+            story_id=story.id,
+            chapter_number=generation_request.chapter_number,
+            content=story_content  # The actual story content
+        )
+        db.add(chapter)
+        db.flush()
         
         # Create Choice records for the generated choices
         choices_with_ids = []
@@ -413,9 +423,13 @@ async def check_story_safety(
                 detail="Story not found"
             )
         
-        # Run safety check
+        # Get all chapter content for safety check
+        chapters = story.chapters  # Get all chapters
+        combined_content = " ".join([chapter.content for chapter in chapters])
+        
+        # Run safety check on combined chapter content
         safety_result = story_service.check_story_safety(
-            story.content,
+            combined_content if combined_content else "",
             child_age,
             language
         )

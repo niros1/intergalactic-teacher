@@ -43,7 +43,21 @@ class StoryService:
                     StoryChapter.chapter_number < chapter_number
                 ).order_by(StoryChapter.chapter_number).all()
                 
-                previous_chapters = [chapter.content for chapter in previous_chapter_records]
+                # Extract chapter content with better context management
+                previous_chapters = []
+                for chapter_record in previous_chapter_records:
+                    # Clean and prepare chapter content for context
+                    content = chapter_record.content.strip()
+                    if content:
+                        # Ensure content is readable and not too fragmented
+                        previous_chapters.append(content)
+                
+                logger.info(f"✅ Found {len(previous_chapter_records)} previous chapters for story continuity")
+                
+                # Log context info for debugging
+                if previous_chapters:
+                    total_context_chars = sum(len(ch) for ch in previous_chapters)
+                    logger.info(f"Providing {len(previous_chapters)} previous chapters, {total_context_chars} total chars for story continuity")
                 
                 # Get previous choices and convert to expected format
                 if story_session.choices_made:
@@ -89,6 +103,9 @@ class StoryService:
                 educational_elements=[]
             )
             
+            # Log context information for debugging
+            logger.info(f"Story generation for chapter {chapter_number}: {len(previous_chapters)} previous chapters, {len(previous_choices)} previous choices")
+            
             # Run the story generation workflow with tracing metadata
             result = story_workflow.invoke(
                 initial_state,
@@ -98,7 +115,9 @@ class StoryService:
                         "child_name": child.name,
                         "theme": theme,
                         "chapter_number": chapter_number,
-                        "has_custom_input": bool(custom_user_input)
+                        "has_custom_input": bool(custom_user_input),
+                        "previous_chapters_count": len(previous_chapters),
+                        "previous_choices_count": len(previous_choices)
                     },
                     "tags": ["story_generation", f"chapter_{chapter_number}", theme]
                 }
@@ -140,10 +159,10 @@ class StoryService:
                 logger.error(f"Failed to generate story: {generation_result.get('error')}")
                 return None
             
-            # Create the story record (without content - stored in chapters)
+            # Create the story record (content now stored in chapters table)
             story = Story(
                 title=title,
-                content="",  # Content will be stored in chapters
+                # content field removed - now using story_chapters table
                 language=child.language_preference,
                 difficulty_level=child.reading_level,
                 themes=[theme],

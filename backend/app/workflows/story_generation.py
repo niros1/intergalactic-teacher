@@ -48,16 +48,68 @@ class StoryGenerationState(TypedDict):
     educational_elements: List[str]
 
 
+def create_story_summary(chapter_content: str, chapter_num: int = 0) -> str:
+    """Create a structured summary of a chapter focusing on key story elements."""
+    # Extract key information (simplified approach - could be enhanced with LLM summarization)
+    words = chapter_content.split()
+    
+    # Take first and last portions to capture beginning and end events
+    if len(words) <= 100:
+        summary = chapter_content
+    else:
+        # Take first 60 words and last 40 words for beginning/end context
+        beginning = ' '.join(words[:60])
+        ending = ' '.join(words[-40:])
+        summary = f"{beginning}... {ending}"
+    
+    return summary[:400]  # Limit to 400 chars for consistency
+
+
+def extract_story_elements(chapter_content: str) -> dict:
+    """Extract key story elements from chapter content."""
+    # Simple extraction - in production, this could use NLP or LLM-based extraction
+    content_lower = chapter_content.lower()
+    
+    # Extract potential character names (capitalized words)
+    import re
+    potential_characters = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', chapter_content)
+    characters = [name for name in potential_characters if len(name.split()) <= 2 and len(name) <= 15][:3]
+    
+    # Extract locations (words after "in", "at", "to" + capitalized words)
+    locations = re.findall(r'(?:in|at|to)\s+(?:the\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)', chapter_content)[:2]
+    
+    # Extract key actions/events (simplified)
+    action_words = ['discovered', 'found', 'met', 'decided', 'went', 'saw', 'heard', 'learned', 'helped']
+    key_events = []
+    for action in action_words:
+        if action in content_lower:
+            # Find sentence containing this action
+            sentences = chapter_content.split('.')
+            for sentence in sentences:
+                if action in sentence.lower():
+                    key_events.append(sentence.strip()[:100])
+                    break
+        if len(key_events) >= 2:
+            break
+    
+    return {
+        'characters': characters[:3],  # Limit to 3 most likely characters
+        'locations': [loc.strip() for loc in locations][:2],  # Limit to 2 locations
+        'key_events': key_events[:2]  # Limit to 2 key events
+    }
+
+
 def create_story_prompt(state: StoryGenerationState) -> str:
-    """Create a personalized story generation prompt."""
+    """Create a personalized story generation prompt with enhanced previous chapters context."""
     prefs = state["child_preferences"]
     theme = state["story_theme"]
     chapter_num = state["chapter_number"]
+    logger.info(f"Generating chapter {chapter_num} with {len(state['previous_chapters'])} previous chapters for context")
     
     # Base prompt structure
     prompt_parts = [
         f"You are a storyteller narrating directly to a child aged {prefs.get('age', 9)}. Write as if you are telling the story in person.",
-        f"Continue the {theme} story. Write the next part of the adventure naturally and engagingly.",
+        f"Continue the {theme} story. Write Chapter {chapter_num} naturally and engagingly, building upon the established story.",
         "",
         "CHILD PROFILE:",
         f"- Age: {prefs.get('age')} years old",
@@ -75,21 +127,61 @@ def create_story_prompt(state: StoryGenerationState) -> str:
         "- Make it naturally flow as if told by a storyteller",
     ]
     
-    # Add context from previous chapters
+    # Add enhanced context from previous chapters - OPTIMIZED FOR STORY CONTINUITY
     if state["previous_chapters"]:
         prompt_parts.extend([
             "",
-            "STORY CONTEXT (Previous chapters):",
-            *[f"Chapter {i+1}: {chapter[:200]}..." for i, chapter in enumerate(state["previous_chapters"])]
+            "📖 STORY CONTEXT - What happened before:",
+            "Use this information to maintain perfect story continuity:"
+        ])
+        
+        # Extract and structure key story elements from each chapter
+        all_characters = set()
+        all_locations = set()
+        chapter_summaries = []
+        
+        for i, chapter in enumerate(state["previous_chapters"]):
+            # Create focused summary
+            summary = create_story_summary(chapter, i+1)
+            chapter_summaries.append(f"Chapter {i+1}: {summary}")
+            
+            # Extract story elements
+            elements = extract_story_elements(chapter)
+            all_characters.update(elements['characters'])
+            all_locations.update(elements['locations'])
+        
+        # Add chapter summaries
+        prompt_parts.extend(chapter_summaries)
+        
+        # Add structured story continuity information
+        if all_characters:
+            prompt_parts.append(f"\n🎭 KEY CHARACTERS: {', '.join(list(all_characters)[:5])}")
+        
+        if all_locations:
+            prompt_parts.append(f"🗺️ STORY LOCATIONS: {', '.join(list(all_locations)[:3])}")
+        
+        prompt_parts.extend([
+            "",
+            "✨ CONTINUITY REQUIREMENTS:",
+            "- Reference and build upon characters, relationships, and events from previous chapters",
+            "- Maintain the established tone, world-building, and character personalities",
+            "- Create natural story progression that acknowledges what came before",
+            "- Use character names and reference previous events when relevant",
+            f"- This is Chapter {chapter_num}, so the story should feel like a natural continuation"
         ])
     
-    # Add choice context
+    # Add choice context with enhanced formatting
     if state["previous_choices"]:
         prompt_parts.extend([
             "",
-            "PREVIOUS CHOICES MADE:",
-            *[f"- {choice['question']}: {choice['chosen_option']}" for choice in state["previous_choices"]]
+            "🎯 PREVIOUS STORY DECISIONS:",
+            "The child made these choices that shaped the story:"
         ])
+        
+        for choice in state["previous_choices"]:
+            prompt_parts.append(f"• {choice['question']}: '{choice['chosen_option']}'")
+        
+        prompt_parts.append("→ Continue the story honoring these decisions and their consequences.")
     
     # Add custom user input context
     if state.get("custom_user_input"):
@@ -103,21 +195,30 @@ def create_story_prompt(state: StoryGenerationState) -> str:
     
     prompt_parts.extend([
         "",
-        "OUTPUT FORMAT:",
+        "📝 OUTPUT FORMAT:",
         "Return a JSON object with:",
-        "- story_content: ONLY the pure story text (no prefixes, no meta-commentary)",
-        "- choices: Array of 2-3 choice options, each with 'text' and 'description'",
+        "- story_content: ONLY the pure story text that continues seamlessly from previous chapters",
+        "- choices: Array of 2-3 meaningful choice options, each with 'text' and 'description'",
         "- educational_elements: Array of learning opportunities in this chapter",
         "- vocabulary_words: Array of challenging words used",
         "",
-        "IMPORTANT: The story_content should start directly with the narrative, like:",
-        '"Rohan stepped into the forest..." NOT "Here is Chapter 2:" or "story_content: `"',
+        "⚠️ CRITICAL: The story_content must feel like a natural continuation of the previous chapters.",
+        "Reference characters, events, and settings established earlier. Make the reader feel",
+        "the story is building coherently toward something meaningful.",
         "",
         "Example choices format:",
         '[{"text": "Help the character", "description": "Show kindness and empathy"}, ...]'
     ])
     
-    return "\n".join(prompt_parts)
+    # Ensure the prompt isn't too long for the LLM
+    full_prompt = "\n".join(prompt_parts)
+    
+    # Log prompt length for debugging
+    word_count = len(full_prompt.split())
+    if word_count > 1500:
+        logger.warning(f"Prompt is quite long ({word_count} words) - consider shortening for better performance")
+    
+    return full_prompt
 
 
 def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
