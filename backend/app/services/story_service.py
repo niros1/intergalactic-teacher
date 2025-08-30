@@ -259,30 +259,33 @@ class StoryService:
                 StorySession.story_id == story.id
             ).order_by(StorySession.last_accessed.desc()).first()
             
-            # Get the content for the current chapter from chapters table
+            # Get the content for ALL chapters from chapters table
             current_chapter = session.current_chapter if session else 1
             
-            # Get the current chapter from the chapters table
-            chapter_record = self.db.query(StoryChapter).filter(
-                StoryChapter.story_id == story.id,
-                StoryChapter.chapter_number == current_chapter
-            ).first()
+            # Get all existing chapters for this story (for display in chat interface)
+            # This allows users to see the full story context when they refresh
+            all_chapters = self.db.query(StoryChapter).filter(
+                StoryChapter.story_id == story.id
+            ).order_by(StoryChapter.chapter_number).all()
             
-            # Use chapter content if available, otherwise fall back to story content
-            if chapter_record:
-                chapter_content = chapter_record.content
+            # Build content array with all chapters
+            all_content = []
+            if all_chapters:
+                # Use chapters from database
+                for chapter in all_chapters:
+                    all_content.append(chapter.content)
             elif story.content:
                 # Fallback for legacy stories - split content by chapter markers
                 if "\n\n---\n\n" in story.content:
                     chapters = story.content.split("\n\n---\n\n")
-                    if current_chapter <= len(chapters):
-                        chapter_content = chapters[current_chapter - 1]
-                    else:
-                        chapter_content = chapters[-1] if chapters else story.content
+                    # Include all chapters for full story context
+                    all_content = chapters
                 else:
-                    chapter_content = story.content
+                    # Single content block - treat as one chapter
+                    all_content = [story.content]
             else:
-                chapter_content = "Chapter content not available"
+                all_content = ["Chapter content not available"]
+            
             
             # Get choices for current chapter if they exist
             choices_data = []
@@ -323,7 +326,7 @@ class StoryService:
                 'id': story.id,
                 'title': story.title,
                 'description': story.description,
-                'content': chapter_content,  # Now returns only current chapter content
+                'content': all_content,  # Now returns ALL chapters as array
                 'language': story.language,
                 'difficulty_level': story.difficulty_level,
                 'themes': story.themes,

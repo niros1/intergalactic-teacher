@@ -69,26 +69,39 @@ export const useStoryRuntime = () => {
       
       // If this is an existing story with content, add all chapters up to current
       if (currentStory.content && currentStory.content.length > 0) {
-        // For now, add the current chapter content
-        // In a real scenario, we'd need to fetch all previous chapters from the backend
-        const chapterText = Array.isArray(currentStory.content) 
-          ? currentStory.content.join('\n\n')
-          : currentStory.content;
+        // If content is an array, each element is a separate chapter
+        if (Array.isArray(currentStory.content)) {
+          // Add each chapter as a separate message
+          currentStory.content.forEach((chapterContent, index) => {
+            const chapterNumber = index + 1;
+            const chapterMessage: StoryMessage = {
+              id: `chapter-${chapterNumber}-${Date.now()}-${index}`,
+              role: 'assistant',
+              content: [{ type: 'text', text: chapterContent }],
+              createdAt: new Date(Date.now() + index * 1000), // Slight delay for ordering
+              metadata: {
+                storyId: currentStory.id,
+                chapterNumber: chapterNumber
+              }
+            };
+            messagesToAdd.push(chapterMessage);
+          });
+        } else {
+          // Single content block - treat as one chapter
+          const chapterMessage: StoryMessage = {
+            id: `chapter-${currentStory.currentChapter}-${Date.now()}`,
+            role: 'assistant',
+            content: [{ type: 'text', text: currentStory.content }],
+            createdAt: new Date(),
+            metadata: {
+              storyId: currentStory.id,
+              chapterNumber: currentStory.currentChapter
+            }
+          };
+          messagesToAdd.push(chapterMessage);
+        }
         
-        const chapterMessage: StoryMessage = {
-          id: `chapter-${currentStory.currentChapter}-${Date.now()}`,
-          role: 'assistant',
-          content: [{ type: 'text', text: chapterText }],
-          createdAt: new Date(),
-          metadata: {
-            storyId: currentStory.id,
-            chapterNumber: currentStory.currentChapter
-          }
-        };
-        
-        messagesToAdd.push(chapterMessage);
-        
-        // Add choices if available
+        // Add choices if available (only after the last chapter)
         if (currentStory.choices && currentStory.choices.length > 0) {
           const choiceMessage: StoryMessage = {
             id: `choices-${Date.now()}`,
@@ -97,7 +110,7 @@ export const useStoryRuntime = () => {
               type: 'text', 
               text: currentChild.language_preference === 'hebrew' ? 'מה תרצה לעשות?' : 'What would you like to do?'
             }],
-            createdAt: new Date(),
+            createdAt: new Date(Date.now() + 2000), // Add after all chapters
             metadata: { 
               choices: currentStory.choices,
               chapterNumber: currentStory.currentChapter

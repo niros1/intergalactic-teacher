@@ -1,7 +1,7 @@
 """Story schemas for request/response validation."""
 
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, validator
 
@@ -46,7 +46,7 @@ class StoryCreate(BaseModel):
 class StoryResponse(StoryBase):
     """Schema for story response."""
     id: int
-    content: str
+    content: Union[str, List[str]]  # Support both string and array for backward compatibility
     target_age_min: int
     target_age_max: int
     estimated_reading_time: int
