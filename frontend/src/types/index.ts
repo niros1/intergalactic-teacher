@@ -255,6 +255,7 @@ export interface MakeChoiceRequest {
   choiceId: string
   optionIndex: number
   timestamp: string
+  customText?: string // Added for free-form text input
 }
 
 export interface SessionResponse {

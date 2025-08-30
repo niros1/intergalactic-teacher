@@ -27,7 +27,8 @@ class StoryService:
         child: Child, 
         theme: str,
         chapter_number: int = 1,
-        story_session: Optional[StorySession] = None
+        story_session: Optional[StorySession] = None,
+        custom_user_input: Optional[str] = None
     ) -> Dict:
         """Generate a personalized story for a child using LangGraph workflow."""
         try:
@@ -47,12 +48,18 @@ class StoryService:
                 if story_session.choices_made:
                     previous_choices = []
                     for choice_data in story_session.choices_made:
-                        # Get the actual choice from database
                         choice_id = choice_data.get("choice_id")
                         option_index = choice_data.get("option_index", 0)
                         
-                        if choice_id:
-                            choice = self.db.query(Choice).filter(Choice.id == choice_id).first()
+                        # Handle custom user input choices differently
+                        if choice_id == "custom-choice" and "chosen_option" in choice_data:
+                            previous_choices.append({
+                                "question": choice_data.get("question", "Custom user input"),
+                                "chosen_option": choice_data["chosen_option"]
+                            })
+                        elif choice_id and str(choice_id).isdigit():
+                            # Handle database stored choices
+                            choice = self.db.query(Choice).filter(Choice.id == int(choice_id)).first()
                             if choice and choice.choices_data and option_index < len(choice.choices_data):
                                 chosen_option_text = choice.choices_data[option_index].get("text", "Unknown option")
                                 previous_choices.append({
@@ -70,6 +77,7 @@ class StoryService:
                 chapter_number=chapter_number,
                 previous_chapters=previous_chapters,
                 previous_choices=previous_choices,
+                custom_user_input=custom_user_input,
                 story_content="",
                 choices=[],
                 safety_score=0.0,
@@ -113,7 +121,7 @@ class StoryService:
         """Create a new story with AI-generated content."""
         try:
             # Generate the first chapter
-            generation_result = self.generate_personalized_story(child, theme, 1)
+            generation_result = self.generate_personalized_story(child, theme, 1, None, None)
             
             if not generation_result["success"]:
                 logger.error(f"Failed to generate story: {generation_result.get('error')}")
@@ -481,7 +489,8 @@ class StoryService:
                 child=child,
                 theme=story_session.story.themes[0] if story_session.story.themes else "adventure",
                 chapter_number=story_branch.leads_to_chapter or choice.chapter_number + 1,
-                story_session=story_session
+                story_session=story_session,
+                custom_user_input=None
             )
             
             if generation_result["success"]:

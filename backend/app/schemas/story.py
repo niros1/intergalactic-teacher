@@ -154,6 +154,7 @@ class ChoiceSelectionRequest(BaseModel):
     choice_id: str = Field(alias="choiceId")
     timestamp: Optional[str] = None
     option_index: Optional[int] = Field(default=0, alias="optionIndex")
+    custom_text: Optional[str] = Field(default=None, alias="customText")
     
     class Config:
         populate_by_name = True

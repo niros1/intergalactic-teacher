@@ -260,7 +260,7 @@ class StorySessionService:
             self.db.rollback()
             return {"success": False, "error": str(e)}
     
-    def advance_to_next_chapter(self, session_id: int) -> Dict:
+    def advance_to_next_chapter(self, session_id: int, custom_user_input: Optional[str] = None) -> Dict:
         """Advance to the next chapter without making a specific choice."""
         try:
             session = self.get_session_by_id(session_id)
@@ -295,7 +295,8 @@ class StorySessionService:
                 child=session.child,
                 theme=session.story.themes[0] if session.story.themes else "adventure",
                 chapter_number=next_chapter,
-                story_session=session
+                story_session=session,
+                custom_user_input=custom_user_input
             )
             
             if not generation_result["success"]:

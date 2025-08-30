@@ -152,6 +152,9 @@ const ChatReadingPage: React.FC = () => {
                             {choice.text}
                           </button>
                         ))}
+                        <div className="text-center mt-3 text-sm text-gray-500 italic">
+                          {isHebrew ? 'או כתב משהו משלך למטה!' : 'Or type your own response below!'}
+                        </div>
                       </div>
                     )}
 
@@ -186,13 +189,31 @@ const ChatReadingPage: React.FC = () => {
 
             {/* Input Area */}
             <div className="border-t border-gray-200 p-4 bg-white/80 backdrop-blur-sm">
+              {/* Helpful hint for custom input */}
+              {runtime.messages && runtime.messages.length > 1 && (
+                <div className="mb-3 text-center text-sm text-gray-600 px-2">
+                  <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-2 border border-purple-100">
+                    <span className="text-purple-600 font-medium">
+                      {isHebrew 
+                        ? '💭 אתה יכול לכתוב כל דבר - הסיפור יתאים לרעיונות שלך!'
+                        : '💭 You can type anything - the story will adapt to your ideas!'}
+                    </span>
+                  </div>
+                </div>
+              )}
+              
               <div className="flex space-x-2">
                 <input
                   type="text"
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                  placeholder={isHebrew ? 'הקלד הודעה...' : 'Type a message...'}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                  placeholder={isHebrew ? 'כתב כל דבר... הסיפור יענה!' : 'Type anything... the story will respond!'}
                   className="flex-1 p-3 border-2 border-purple-200 rounded-2xl focus:border-purple-400 focus:outline-none text-lg"
                   style={{ direction: isHebrew ? 'rtl' : 'ltr' }}
                 />

@@ -181,6 +181,42 @@ export const useStoryRuntime = () => {
     }
   }, [state.sessionId, makeChoice, sendCurrentChapter]);
 
+  // Handle custom text input as a story choice
+  const handleCustomChoice = useCallback(async (customText: string) => {
+    if (!state.sessionId || !customText.trim()) return;
+
+    try {
+      setState(prev => ({ ...prev, isLoading: true }));
+
+      // Add user custom message
+      const userMessage: StoryMessage = {
+        id: `custom-choice-${Date.now()}`,
+        role: 'user',
+        content: [{ type: 'text', text: customText }],
+        createdAt: new Date()
+      };
+
+      setState(prev => ({
+        ...prev,
+        messages: [...prev.messages, userMessage]
+      }));
+
+      // Make the custom choice via the story store using a generic choice ID
+      await makeChoice(state.sessionId, {
+        choiceId: 'custom-choice',
+        optionIndex: 0,
+        timestamp: new Date().toISOString(),
+        customText: customText.trim()
+      });
+
+      setState(prev => ({ ...prev, isLoading: false }));
+
+    } catch (error) {
+      console.error('Failed to make custom choice:', error);
+      setState(prev => ({ ...prev, isLoading: false }));
+    }
+  }, [state.sessionId, makeChoice]);
+
   // Simple runtime object for assistant-ui
   const runtime = useMemo(() => {
     return {
@@ -219,6 +255,14 @@ export const useStoryRuntime = () => {
               content.toLowerCase().includes('התחל') ||
               content.toLowerCase().includes('המשך')) {
             sendCurrentChapter();
+            return;
+          }
+
+          // If we have an active session and it's not just a start command,
+          // treat any user input as a custom choice that should advance the story
+          if (state.sessionId && content.trim().length > 0) {
+            await handleCustomChoice(content);
+            return;
           }
         }
       },
@@ -230,7 +274,7 @@ export const useStoryRuntime = () => {
         }
       }
     };
-  }, [state, isLoading, handleChoice, sendCurrentChapter]);
+  }, [state, isLoading, handleChoice, handleCustomChoice, sendCurrentChapter]);
 
   // Auto-initialize when story is available
   useEffect(() => {

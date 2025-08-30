@@ -1,6 +1,6 @@
 """LangGraph workflow for story generation with personalization and safety checks."""
 
-from typing import Any, Dict, List, TypedDict
+from typing import Any, Dict, List, Optional, TypedDict
 import json
 import logging
 import re
@@ -22,6 +22,7 @@ class StoryGenerationState(TypedDict):
     chapter_number: int
     previous_chapters: List[str]
     previous_choices: List[Dict]
+    custom_user_input: Optional[str]  # New field for custom user messages
     
     # Generated content
     story_content: str
@@ -79,6 +80,16 @@ def create_story_prompt(state: StoryGenerationState) -> str:
             "",
             "PREVIOUS CHOICES MADE:",
             *[f"- {choice['question']}: {choice['chosen_option']}" for choice in state["previous_choices"]]
+        ])
+    
+    # Add custom user input context
+    if state.get("custom_user_input"):
+        prompt_parts.extend([
+            "",
+            "CUSTOM USER INPUT:",
+            f"The child has expressed: \"{state['custom_user_input']}\"",
+            "Please incorporate this message naturally into the story progression and respond to it meaningfully.",
+            "The story should acknowledge and build upon what the child has said or requested."
         ])
     
     prompt_parts.extend([

@@ -178,7 +178,9 @@ async def generate_story(
         result = story_service.generate_personalized_story(
             child=child,
             theme=generation_request.theme,
-            chapter_number=generation_request.chapter_number
+            chapter_number=generation_request.chapter_number,
+            story_session=None,
+            custom_user_input=None
         )
         
         if not result["success"]:
@@ -560,8 +562,10 @@ async def make_story_choice(
             )
         
         # Process the choice
-        # For dynamic story generation, we'll use advance_to_next_chapter for all choices
-        # The choice context will be preserved in the session for story generation
+        # Check if this is a custom user input choice
+        custom_user_input = None
+        if choice_request.choice_id == "custom-choice" and choice_request.custom_text:
+            custom_user_input = choice_request.custom_text.strip()
         
         # Record the choice made (for context in next chapter generation)
         session = session_service.get_session_by_id(session_id)
@@ -571,20 +575,28 @@ async def make_story_choice(
                 choice_id_int = int(choice_request.choice_id)
                 session.add_choice(choice_id_int, choice_request.option_index or 0)
             except ValueError:
-                # Handle special choice IDs like "continue" by storing choice information
+                # Handle special choice IDs like "continue" or "custom-choice"
                 if not session.choices_made:
                     session.choices_made = []
-                session.choices_made.append({
+                
+                choice_record = {
                     "choice_id": choice_request.choice_id,  # Keep as string for special choices
                     "option_index": choice_request.option_index or 0,
                     "timestamp": choice_request.timestamp or datetime.utcnow().isoformat(),
-                })
+                }
+                
+                # For custom choices, record the user's text as the chosen option
+                if choice_request.choice_id == "custom-choice" and choice_request.custom_text:
+                    choice_record["chosen_option"] = choice_request.custom_text.strip()
+                    choice_record["question"] = "Custom user input"
+                
+                session.choices_made.append(choice_record)
             
             # Commit the choice to database
             session_service.db.commit()
         
-        # Use dynamic chapter generation for all choices
-        result = session_service.advance_to_next_chapter(session_id)
+        # Use dynamic chapter generation, passing custom input if provided
+        result = session_service.advance_to_next_chapter(session_id, custom_user_input)
         
         if not result["success"]:
             raise HTTPException(
