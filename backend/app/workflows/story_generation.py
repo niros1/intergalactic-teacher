@@ -4,14 +4,23 @@ from typing import Any, Dict, List, Optional, TypedDict
 import json
 import logging
 import re
+import os
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_ollama import ChatOllama
 from langgraph.graph import END, StateGraph
+from langsmith import Client
+from langsmith.wrappers import wrap_openai
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Configure LangSmith tracing if environment variables are set
+if os.getenv("LANGSMITH_TRACING", "").lower() == "true":
+    logger.info("LangSmith tracing enabled for project: %s", os.getenv("LANGSMITH_PROJECT", "default"))
+else:
+    logger.info("LangSmith tracing is not enabled")
 
 
 class StoryGenerationState(TypedDict):
@@ -374,7 +383,7 @@ def should_regenerate_content(state: StoryGenerationState) -> str:
 
 # Create the workflow graph
 def create_story_generation_workflow():
-    """Create the story generation workflow graph."""
+    """Create the story generation workflow graph with LangSmith tracing."""
     
     workflow = StateGraph(StoryGenerationState)
     
@@ -402,7 +411,15 @@ def create_story_generation_workflow():
     workflow.add_edge("enhance_content", "safety_check")  # Re-check after enhancement
     workflow.add_edge("calculate_metrics", END)
     
-    return workflow.compile()
+    # Compile with checkpointer for better tracing
+    compiled_workflow = workflow.compile()
+    
+    # Add metadata for LangSmith tracing
+    if os.getenv("LANGSMITH_TRACING", "").lower() == "true":
+        compiled_workflow.name = "story_generation_workflow"
+        logger.info("Story generation workflow compiled with LangSmith tracing")
+    
+    return compiled_workflow
 
 
 # Create a singleton instance

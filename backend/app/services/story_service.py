@@ -89,8 +89,20 @@ class StoryService:
                 educational_elements=[]
             )
             
-            # Run the story generation workflow
-            result = story_workflow.invoke(initial_state)
+            # Run the story generation workflow with tracing metadata
+            result = story_workflow.invoke(
+                initial_state,
+                config={
+                    "metadata": {
+                        "child_id": child.id,
+                        "child_name": child.name,
+                        "theme": theme,
+                        "chapter_number": chapter_number,
+                        "has_custom_input": bool(custom_user_input)
+                    },
+                    "tags": ["story_generation", f"chapter_{chapter_number}", theme]
+                }
+            )
             
             return {
                 "success": True,
