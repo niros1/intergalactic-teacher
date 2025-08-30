@@ -37,12 +37,13 @@ class StoryService:
             previous_choices = []
             
             if story_session and story_session.story:
-                # Get previous chapters
-                story_content = story_session.story.content
-                if story_content:
-                    # Split story into chapters (simple implementation)
-                    chapters = story_content.split("\n\n---\n\n")
-                    previous_chapters = chapters[:chapter_number-1]
+                # Get previous chapters from story_chapters table
+                previous_chapter_records = self.db.query(StoryChapter).filter(
+                    StoryChapter.story_id == story_session.story_id,
+                    StoryChapter.chapter_number < chapter_number
+                ).order_by(StoryChapter.chapter_number).all()
+                
+                previous_chapters = [chapter.content for chapter in previous_chapter_records]
                 
                 # Get previous choices and convert to expected format
                 if story_session.choices_made:
@@ -268,22 +269,14 @@ class StoryService:
                 StoryChapter.story_id == story.id
             ).order_by(StoryChapter.chapter_number).all()
             
-            # Build content array with all chapters
+            # Build content array with all chapters from story_chapters table
             all_content = []
             if all_chapters:
-                # Use chapters from database
+                # Use chapters from database - this is now the primary source for all chapters
                 for chapter in all_chapters:
                     all_content.append(chapter.content)
-            elif story.content:
-                # Fallback for legacy stories - split content by chapter markers
-                if "\n\n---\n\n" in story.content:
-                    chapters = story.content.split("\n\n---\n\n")
-                    # Include all chapters for full story context
-                    all_content = chapters
-                else:
-                    # Single content block - treat as one chapter
-                    all_content = [story.content]
             else:
+                # No chapters found in story_chapters table
                 all_content = ["Chapter content not available"]
             
             

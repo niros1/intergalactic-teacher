@@ -47,8 +47,8 @@ def create_story_prompt(state: StoryGenerationState) -> str:
     
     # Base prompt structure
     prompt_parts = [
-        f"You are a creative children's story writer specializing in interactive narratives for children aged {prefs.get('age', 9)}.",
-        f"Create Chapter {chapter_num} of an engaging story with the theme: {theme}",
+        f"You are a storyteller narrating directly to a child aged {prefs.get('age', 9)}. Write as if you are telling the story in person.",
+        f"Continue the {theme} story. Write the next part of the adventure naturally and engagingly.",
         "",
         "CHILD PROFILE:",
         f"- Age: {prefs.get('age')} years old",
@@ -57,13 +57,13 @@ def create_story_prompt(state: StoryGenerationState) -> str:
         f"- Interests: {', '.join(prefs.get('interests', []))}",
         f"- Vocabulary Level: {prefs.get('vocabulary_level', 50)}/100",
         "",
-        "STORY REQUIREMENTS:",
-        "- Write 3-5 paragraphs appropriate for the child's reading level",
-        "- Include vocabulary that matches their level with 2-3 slightly challenging words",
-        "- Make it educational but fun and engaging",
+        "WRITING STYLE:",
+        "- Write in direct storytelling voice (no meta-commentary like 'Here is Chapter X' or 'story_content:')",
+        "- Start immediately with the story content",
+        "- Write 3-5 engaging paragraphs",
+        "- Use vocabulary appropriate for the reading level with 2-3 challenging words",
         "- Include diverse characters and positive values",
-        "- Ensure cultural sensitivity",
-        "- End with a meaningful choice point for the child",
+        "- Make it naturally flow as if told by a storyteller",
     ]
     
     # Add context from previous chapters
@@ -96,10 +96,13 @@ def create_story_prompt(state: StoryGenerationState) -> str:
         "",
         "OUTPUT FORMAT:",
         "Return a JSON object with:",
-        "- story_content: The chapter text",
+        "- story_content: ONLY the pure story text (no prefixes, no meta-commentary)",
         "- choices: Array of 2-3 choice options, each with 'text' and 'description'",
         "- educational_elements: Array of learning opportunities in this chapter",
         "- vocabulary_words: Array of challenging words used",
+        "",
+        "IMPORTANT: The story_content should start directly with the narrative, like:",
+        '"Rohan stepped into the forest..." NOT "Here is Chapter 2:" or "story_content: `"',
         "",
         "Example choices format:",
         '[{"text": "Help the character", "description": "Show kindness and empathy"}, ...]'
@@ -158,8 +161,17 @@ def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
             
             # Extract the actual story content and choices
             story_text = story_data.get("story_content", "")
-            # Clean up any escape characters and formatting
+            # Clean up any escape characters, formatting, and prefixes
             story_text = story_text.replace('\\n', '\n').replace('\\"', '"').strip()
+            
+            # Remove prefixes even from successful JSON parsing
+            story_text = re.sub(r'Here is Chapter \d+ of.*?:', '', story_text)
+            story_text = re.sub(r'Chapter \d+:', '', story_text)
+            story_text = re.sub(r'story_content:\s*`', '', story_text)
+            story_text = re.sub(r'^story_content:', '', story_text)
+            story_text = story_text.replace('Here is the story:', '')
+            story_text = story_text.replace('Here\'s the story:', '')
+            story_text = story_text.strip()
             choices = story_data.get("choices", [])
             
             # Ensure choices is a proper list
@@ -194,10 +206,16 @@ def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
             # Extract any readable text from the content
             clean_content = content
             
-            # Remove common JSON artifacts
+            # Remove common JSON artifacts and prefixes
             clean_content = clean_content.replace('```json', '').replace('```', '')
-            clean_content = clean_content.replace('Here is Chapter 1 of the story:', '')
+            # Remove various chapter prefixes
+            clean_content = re.sub(r'Here is Chapter \d+ of.*?:', '', clean_content)
+            clean_content = re.sub(r'Chapter \d+:', '', clean_content)
+            clean_content = re.sub(r'story_content:\s*`', '', clean_content)
+            clean_content = re.sub(r'story_content:', '', clean_content)
             clean_content = clean_content.replace('Please let me know if you\'d like me to continue', '')
+            clean_content = clean_content.replace('Here is the story:', '')
+            clean_content = clean_content.replace('Here\'s the story:', '')
             
             # Try to extract story_content value if present
             if "story_content" in clean_content:
