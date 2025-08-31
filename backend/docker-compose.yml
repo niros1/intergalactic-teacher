@@ -50,10 +50,10 @@ services:
       - DATABASE_URL=postgresql://${DATABASE_USER:-intergalactic}:${DATABASE_PASSWORD:-password}@db:5432/${DATABASE_NAME:-intergalactic_teacher}
       - REDIS_URL=redis://redis:6379/0
       - ENVIRONMENT=development
-      - LANGSMITH_TRACING=true
+      - LANGSMITH_TRACING=${LANGSMITH_TRACING:-false}
       - LANGSMITH_ENDPOINT=https://api.smith.langchain.com
-      - LANGSMITH_API_KEY=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
-      - LANGSMITH_PROJECT=intergalactic-teacher
+      - LANGSMITH_API_KEY=${LANGSMITH_API_KEY}
+      - LANGSMITH_PROJECT=${LANGSMITH_PROJECT:-intergalactic-teacher}
     volumes:
       - .:/app
       - /app/__pycache__
