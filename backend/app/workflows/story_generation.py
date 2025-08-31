@@ -344,7 +344,7 @@ def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
                 clean_content = "Once upon a time in a magical forest, there lived a curious little rabbit named Rosie. She loved to explore and make new friends. Today was going to be a special adventure!"
             
             return {
-                "story_content": clean_content[:1000],  # Reasonable length
+                "story_content": clean_content,  # No artificial length limit
                 "choices": [
                     {"text": "Continue the adventure", "description": "See what happens next"},
                     {"text": "Make a different choice", "description": "Try a different path"}
