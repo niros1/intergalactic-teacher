@@ -36,7 +36,7 @@ app.add_middleware(
 # JWT Configuration
 SECRET_KEY = "your-super-secret-key-change-this"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 3000
 
 # Database setup
 def init_db():

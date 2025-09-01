@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     
     # Security
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 3000
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     PASSWORD_MIN_LENGTH: int = 8
     

@@ -9,8 +9,7 @@ import os
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_ollama import ChatOllama
 from langgraph.graph import END, StateGraph
-from langsmith import Client
-from langsmith.wrappers import wrap_openai
+# Removed unused LangSmith imports - tracing is handled automatically
 
 from app.core.config import settings
 
@@ -65,38 +64,69 @@ def create_story_summary(chapter_content: str, chapter_num: int = 0) -> str:
     return summary[:400]  # Limit to 400 chars for consistency
 
 
-def extract_story_elements(chapter_content: str) -> dict:
-    """Extract key story elements from chapter content."""
-    # Simple extraction - in production, this could use NLP or LLM-based extraction
-    content_lower = chapter_content.lower()
+def generate_simple_fallback_choices(child_age: int = 9, language: str = 'english') -> list:
+    """Generate simple fallback choices if LLM doesn't provide any."""
+    if child_age <= 8:
+        fallback_choices = [
+            {"text": "Ask 'What happens next?'", "description": "Continue the magical story"},
+            {"text": "Make a new discovery", "description": "Find something wonderful in the story"},
+            {"text": "Be helpful and kind", "description": "Show kindness to the characters"}
+        ]
+    else:
+        fallback_choices = [
+            {"text": "Continue the adventure", "description": "See where the story leads next"},
+            {"text": "Make a thoughtful decision", "description": "Think carefully about the best choice"},
+            {"text": "Learn something new", "description": "Discover something interesting in the story"}
+        ]
     
-    # Extract potential character names (capitalized words)
-    import re
-    potential_characters = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', chapter_content)
-    characters = [name for name in potential_characters if len(name.split()) <= 2 and len(name) <= 15][:3]
+    # Translate to Hebrew if needed
+    if language == 'hebrew':
+        fallback_choices = translate_choices_to_hebrew(fallback_choices)
     
-    # Extract locations (words after "in", "at", "to" + capitalized words)
-    locations = re.findall(r'(?:in|at|to)\s+(?:the\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)', chapter_content)[:2]
-    
-    # Extract key actions/events (simplified)
-    action_words = ['discovered', 'found', 'met', 'decided', 'went', 'saw', 'heard', 'learned', 'helped']
-    key_events = []
-    for action in action_words:
-        if action in content_lower:
-            # Find sentence containing this action
-            sentences = chapter_content.split('.')
-            for sentence in sentences:
-                if action in sentence.lower():
-                    key_events.append(sentence.strip()[:100])
-                    break
-        if len(key_events) >= 2:
-            break
-    
-    return {
-        'characters': characters[:3],  # Limit to 3 most likely characters
-        'locations': [loc.strip() for loc in locations][:2],  # Limit to 2 locations
-        'key_events': key_events[:2]  # Limit to 2 key events
+    return fallback_choices
+
+
+def translate_choices_to_hebrew(choices: list) -> list:
+    """Simple Hebrew translation for choices (in production, use proper translation service)."""
+    translation_map = {
+        "Go left": "לך שמאלה",
+        "Go right": "לך ימינה", 
+        "Look around first": "תסתכל מסביב קודם",
+        "Enter through the door": "היכנס דרך הדלת",
+        "Knock first": "תדפוק קודם",
+        "Look for another way": "תחפש דרך אחרת",
+        "Talk to them": "תדבר איתם",
+        "Wave hello": "תנופף שלום",
+        "Walk away quietly": "תלך בשקט",
+        "Offer to help": "תציע לעזור",
+        "Ask what happened": "תשאל מה קרה",
+        "Find others to assist": "תמצא אחרים לעזור",
+        "Pick it up": "תרים את זה",
+        "Examine it closely": "תבדוק את זה מקרוב",
+        "Leave it alone": "תשאיר את זה במקום",
+        "Continue the adventure": "תמשיך את ההרפתקה",
+        "Make a different choice": "תעשה בחירה אחרת",
+        "What happens next?": "מה יקרה אחר כך?",
+        "Make a new friend": "תכיר חבר חדש",
+        "Be curious and explore": "תהיה סקרן ותחקור",
+        "Ask 'What happens next?'": "שאל 'מה קורה אחר כך?'",
+        "Make a new discovery": "גלה משהו חדש",
+        "Be helpful and kind": "תהיה מועיל וחביב",
+        "Make a thoughtful decision": "קבל החלטה מחושבת",
+        "Learn something new": "למד משהו חדש"
     }
+    
+    translated_choices = []
+    for choice in choices:
+        hebrew_text = translation_map.get(choice["text"], choice["text"])
+        translated_choices.append({
+            "text": hebrew_text,
+            "description": choice["description"]  # Keep English description for now
+        })
+    
+    return translated_choices
+
+
 
 
 def create_story_prompt(state: StoryGenerationState) -> str:
@@ -135,30 +165,15 @@ def create_story_prompt(state: StoryGenerationState) -> str:
             "Use this information to maintain perfect story continuity:"
         ])
         
-        # Extract and structure key story elements from each chapter
-        all_characters = set()
-        all_locations = set()
+        # Add chapter summaries for context
         chapter_summaries = []
-        
         for i, chapter in enumerate(state["previous_chapters"]):
             # Create focused summary
             summary = create_story_summary(chapter, i+1)
             chapter_summaries.append(f"Chapter {i+1}: {summary}")
-            
-            # Extract story elements
-            elements = extract_story_elements(chapter)
-            all_characters.update(elements['characters'])
-            all_locations.update(elements['locations'])
         
         # Add chapter summaries
         prompt_parts.extend(chapter_summaries)
-        
-        # Add structured story continuity information
-        if all_characters:
-            prompt_parts.append(f"\n🎭 KEY CHARACTERS: {', '.join(list(all_characters)[:5])}")
-        
-        if all_locations:
-            prompt_parts.append(f"🗺️ STORY LOCATIONS: {', '.join(list(all_locations)[:3])}")
         
         prompt_parts.extend([
             "",
@@ -194,20 +209,19 @@ def create_story_prompt(state: StoryGenerationState) -> str:
         ])
     
     prompt_parts.extend([
-        "",
-        "📝 OUTPUT FORMAT:",
-        "Return a JSON object with:",
-        "- story_content: ONLY the pure story text that continues seamlessly from previous chapters",
-        "- choices: Array of 2-3 meaningful choice options, each with 'text' and 'description'",
-        "- educational_elements: Array of learning opportunities in this chapter",
-        "- vocabulary_words: Array of challenging words used",
-        "",
+        "", 
         "⚠️ CRITICAL: The story_content must feel like a natural continuation of the previous chapters.",
         "Reference characters, events, and settings established earlier. Make the reader feel",
         "the story is building coherently toward something meaningful.",
         "",
-        "Example choices format:",
-        '[{"text": "Help the character", "description": "Show kindness and empathy"}, ...]'
+        "OUTPUT FORMAT MUST BE JSON!!!",
+        "JSON output example:",
+        "{",
+        "\"story_content\": \"ONLY the pure story text that continues seamlessly from previous chapters\",",
+        "\"choices\": [\"Array of 2-3 SPECIFIC and CONTEXTUAL choice options based on the story content\"],",
+        "\"educational_elements\": [\"Array of learning opportunities in this chapter\"],",
+        "\"vocabulary_words\": [\"Array of challenging words used\"]",
+        "}"
     ])
     
     # Ensure the prompt isn't too long for the LLM
@@ -242,8 +256,9 @@ def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
         
         response = llm.invoke(messages)
         content = response.content.strip()
+        logger.info(f"LLM raw response: {content}")
         
-        # Try to parse JSON response
+        # Try to parse JSON response - DEBUG MODE: No fallbacks, raise errors
         try:
             # Extract JSON from various formats the model might return
             json_content = content
@@ -254,11 +269,13 @@ def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
                 end = content.find("```", start)
                 if end > start:
                     json_content = content[start:end].strip()
+                    logger.info(f"Extracted from ```json blocks: {json_content}")
             elif "```" in content:
                 start = content.find("```") + 3
                 end = content.find("```", start)
                 if end > start:
                     json_content = content[start:end].strip()
+                    logger.info(f"Extracted from ``` blocks: {json_content}")
             
             # Try to find JSON object in the content
             if "{" in json_content:
@@ -266,7 +283,9 @@ def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
                 end = json_content.rfind("}") + 1
                 if end > start:
                     json_content = json_content[start:end]
+                    logger.info(f"Extracted JSON object: {json_content}")
             
+            logger.info(f"Final JSON content to parse: {json_content}")
             story_data = json.loads(json_content)
             
             # Extract the actual story content and choices
@@ -298,11 +317,10 @@ def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
                     })
             
             if not valid_choices:
-                # Provide default choices if none are valid
-                valid_choices = [
-                    {"text": "Continue the adventure", "description": "See what happens next"},
-                    {"text": "Make a different choice", "description": "Try a different path"}
-                ]
+                # Use simple fallback choices if LLM doesn't provide any
+                child_age = state["child_preferences"].get("age", 9)
+                language = state["child_preferences"].get("language", "english")
+                valid_choices = generate_simple_fallback_choices(child_age, language)
             
             return {
                 "story_content": story_text,
@@ -312,46 +330,11 @@ def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
             }
             
         except (json.JSONDecodeError, Exception) as e:
-            logger.warning(f"Failed to parse JSON response: {e}, using fallback")
-            # Extract any readable text from the content
-            clean_content = content
-            
-            # Remove common JSON artifacts and prefixes
-            clean_content = clean_content.replace('```json', '').replace('```', '')
-            # Remove various chapter prefixes
-            clean_content = re.sub(r'Here is Chapter \d+ of.*?:', '', clean_content)
-            clean_content = re.sub(r'Chapter \d+:', '', clean_content)
-            clean_content = re.sub(r'story_content:\s*`', '', clean_content)
-            clean_content = re.sub(r'story_content:', '', clean_content)
-            clean_content = clean_content.replace('Please let me know if you\'d like me to continue', '')
-            clean_content = clean_content.replace('Here is the story:', '')
-            clean_content = clean_content.replace('Here\'s the story:', '')
-            
-            # Try to extract story_content value if present
-            if "story_content" in clean_content:
-                # Try to extract content between quotes after story_content
-                match = re.search(r'"story_content"\s*:\s*"([^"]+)"', clean_content, re.DOTALL)
-                if match:
-                    clean_content = match.group(1)
-                    clean_content = clean_content.replace('\\n', '\n').replace('\\"', '"')
-            
-            # Remove any remaining JSON structure
-            clean_content = re.sub(r'[{}\[\]"]', '', clean_content)
-            clean_content = re.sub(r'\s+', ' ', clean_content).strip()
-            
-            # If content is too messy, provide a simple fallback story
-            if len(clean_content) < 50 or '{' in clean_content:
-                clean_content = "Once upon a time in a magical forest, there lived a curious little rabbit named Rosie. She loved to explore and make new friends. Today was going to be a special adventure!"
-            
-            return {
-                "story_content": clean_content,  # No artificial length limit
-                "choices": [
-                    {"text": "Continue the adventure", "description": "See what happens next"},
-                    {"text": "Make a different choice", "description": "Try a different path"}
-                ],
-                "educational_elements": ["Reading comprehension", "Decision making"],
-                "vocabulary_words": [],
-            }
+            logger.error(f"JSON parsing failed! Raw content: {content}")
+            logger.error(f"Attempted to parse: {json_content}")
+            logger.error(f"JSON error: {str(e)}")
+            # DEBUG MODE: Raise the error instead of using fallbacks
+            raise ValueError(f"LLM returned invalid JSON. Raw response: {content[:500]}... Error: {str(e)}")
             
     except Exception as e:
         logger.error(f"Error generating story content: {e}")
