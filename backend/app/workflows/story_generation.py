@@ -64,69 +64,67 @@ def create_story_summary(chapter_content: str, chapter_num: int = 0) -> str:
     return summary[:400]  # Limit to 400 chars for consistency
 
 
-def generate_simple_fallback_choices(child_age: int = 9, language: str = 'english') -> list:
-    """Generate simple fallback choices if LLM doesn't provide any."""
-    if child_age <= 8:
-        fallback_choices = [
-            {"text": "Ask 'What happens next?'", "description": "Continue the magical story"},
-            {"text": "Make a new discovery", "description": "Find something wonderful in the story"},
-            {"text": "Be helpful and kind", "description": "Show kindness to the characters"}
-        ]
-    else:
-        fallback_choices = [
-            {"text": "Continue the adventure", "description": "See where the story leads next"},
-            {"text": "Make a thoughtful decision", "description": "Think carefully about the best choice"},
-            {"text": "Learn something new", "description": "Discover something interesting in the story"}
-        ]
+def fix_json_formatting(json_str: str) -> str:
+    """
+    Fix common JSON formatting issues caused by LLM responses,
+    particularly unescaped newlines inside string values.
+    """
+    try:
+        # First, try to parse as-is in case it's already valid
+        json.loads(json_str)
+        return json_str
+    except json.JSONDecodeError:
+        logger.info("JSON parsing failed, attempting to fix formatting...")
     
-    # Translate to Hebrew if needed
-    if language == 'hebrew':
-        fallback_choices = translate_choices_to_hebrew(fallback_choices)
-    
-    return fallback_choices
+    # Use the regex-based approach which is more reliable for this specific issue
+    return fix_newlines_in_json_strings(json_str)
 
 
-def translate_choices_to_hebrew(choices: list) -> list:
-    """Simple Hebrew translation for choices (in production, use proper translation service)."""
-    translation_map = {
-        "Go left": "לך שמאלה",
-        "Go right": "לך ימינה", 
-        "Look around first": "תסתכל מסביב קודם",
-        "Enter through the door": "היכנס דרך הדלת",
-        "Knock first": "תדפוק קודם",
-        "Look for another way": "תחפש דרך אחרת",
-        "Talk to them": "תדבר איתם",
-        "Wave hello": "תנופף שלום",
-        "Walk away quietly": "תלך בשקט",
-        "Offer to help": "תציע לעזור",
-        "Ask what happened": "תשאל מה קרה",
-        "Find others to assist": "תמצא אחרים לעזור",
-        "Pick it up": "תרים את זה",
-        "Examine it closely": "תבדוק את זה מקרוב",
-        "Leave it alone": "תשאיר את זה במקום",
-        "Continue the adventure": "תמשיך את ההרפתקה",
-        "Make a different choice": "תעשה בחירה אחרת",
-        "What happens next?": "מה יקרה אחר כך?",
-        "Make a new friend": "תכיר חבר חדש",
-        "Be curious and explore": "תהיה סקרן ותחקור",
-        "Ask 'What happens next?'": "שאל 'מה קורה אחר כך?'",
-        "Make a new discovery": "גלה משהו חדש",
-        "Be helpful and kind": "תהיה מועיל וחביב",
-        "Make a thoughtful decision": "קבל החלטה מחושבת",
-        "Learn something new": "למד משהו חדש"
-    }
+def fix_newlines_in_json_strings(json_str: str) -> str:
+    """
+    Robust approach: Use regex to find and fix unescaped newlines in JSON string values.
+    This handles the most common case where LLM outputs story_content with literal newlines.
+    """
+    import re
     
-    translated_choices = []
-    for choice in choices:
-        hebrew_text = translation_map.get(choice["text"], choice["text"])
-        translated_choices.append({
-            "text": hebrew_text,
-            "description": choice["description"]  # Keep English description for now
-        })
+    # First, try a simple approach: replace literal newlines within quotes with escaped newlines
+    # This pattern finds content between quotes that spans multiple lines
+    def fix_multiline_string(match):
+        content = match.group(1)
+        # Replace literal newlines with escaped ones, but preserve existing escaped ones
+        fixed_content = content.replace('\n', '\\n').replace('\r', '\\r')
+        # Fix any double-escaped newlines that might occur
+        fixed_content = fixed_content.replace('\\\\n', '\\n').replace('\\\\r', '\\r')
+        return f'"{fixed_content}"'
     
-    return translated_choices
-
-
+    # Pattern to match quoted strings that contain newlines
+    multiline_string_pattern = r'"([^"]*\n[^"]*)"'
+    fixed_json = re.sub(multiline_string_pattern, fix_multiline_string, json_str, flags=re.MULTILINE | re.DOTALL)
+    
+    # Handle the specific case of story_content field which is most likely to have this issue
+    story_content_pattern = r'("story_content"\s*:\s*")([^"]*(?:\n[^"]*)*?)(")'
+    
+    def fix_story_content(match):
+        prefix = match.group(1)
+        content = match.group(2) 
+        suffix = match.group(3)
+        
+        # Escape newlines and any unescaped quotes in the content
+        fixed_content = content.replace('\n', '\\n').replace('\r', '\\r')
+        # Handle any embedded quotes (basic approach)
+        fixed_content = re.sub(r'(?<!\\)"', '\\"', fixed_content)
+        
+        return f'{prefix}{fixed_content}{suffix}'
+    
+    # Apply story_content specific fix
+    fixed_json = re.sub(story_content_pattern, fix_story_content, fixed_json, flags=re.MULTILINE | re.DOTALL)
+    
+    # Clean up common JSON formatting issues
+    # Remove trailing commas
+    fixed_json = re.sub(r',\s*}', '}', fixed_json)
+    fixed_json = re.sub(r',\s*]', ']', fixed_json)
+    
+    return fixed_json
 
 
 def create_story_prompt(state: StoryGenerationState) -> str:
@@ -213,14 +211,18 @@ def create_story_prompt(state: StoryGenerationState) -> str:
         "⚠️ CRITICAL: The story_content must feel like a natural continuation of the previous chapters.",
         "Reference characters, events, and settings established earlier. Make the reader feel",
         "the story is building coherently toward something meaningful.",
-        "",
-        "OUTPUT FORMAT MUST BE JSON!!!",
-        "JSON output example:",
+        "---------",
+        "OUTPUT FORMAT MUST BE VALID JSON !!!",
+        "Follow this JSON output example:",
         "{",
         "\"story_content\": \"ONLY the pure story text that continues seamlessly from previous chapters\",",
-        "\"choices\": [\"Array of 2-3 SPECIFIC and CONTEXTUAL choice options based on the story content\"],",
-        "\"educational_elements\": [\"Array of learning opportunities in this chapter\"],",
-        "\"vocabulary_words\": [\"Array of challenging words used\"]",
+        "\"choices\": [",
+        "  {\"text\": \"Talk to Luna about the map\", \"description\": \"Learn more about the treasure map\"},",
+        "  {\"text\": \"Follow the path through the forest\", \"description\": \"Explore the mysterious forest path\"},",
+        "  {\"text\": \"Help prepare for the festival\", \"description\": \"Join in the festival preparations\"}",
+        "],",
+        "\"educational_elements\": [\"Teamwork\", \"Problem solving\"],",
+        "\"vocabulary_words\": [\"treasure\", \"mysterious\", \"festival\"]",
         "}"
     ])
     
@@ -286,6 +288,11 @@ def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
                     logger.info(f"Extracted JSON object: {json_content}")
             
             logger.info(f"Final JSON content to parse: {json_content}")
+            
+            # Pre-process JSON content to fix unescaped newlines and other JSON issues
+            json_content = fix_json_formatting(json_content)
+            logger.info(f"JSON content after fixing: {json_content}")
+            
             story_data = json.loads(json_content)
             
             # Extract the actual story content and choices
@@ -307,20 +314,26 @@ def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
             if not isinstance(choices, list):
                 choices = []
             
-            # Validate choice structure
+            # Validate choice structure - handle both object and string formats
             valid_choices = []
             for choice in choices:
                 if isinstance(choice, dict) and "text" in choice:
+                    # LLM returned proper object format
                     valid_choices.append({
                         "text": choice.get("text", ""),
                         "description": choice.get("description", "")
                     })
+                elif isinstance(choice, str) and choice.strip():
+                    # LLM returned string format - convert to object
+                    valid_choices.append({
+                        "text": choice.strip(),
+                        "description": ""  # No description available
+                    })
             
             if not valid_choices:
-                # Use simple fallback choices if LLM doesn't provide any
-                child_age = state["child_preferences"].get("age", 9)
-                language = state["child_preferences"].get("language", "english")
-                valid_choices = generate_simple_fallback_choices(child_age, language)
+                # If LLM doesn't provide valid choices, raise an error
+                logger.error("LLM didn't provide valid choices in the response")
+                raise ValueError("No valid choices provided in LLM response")
             
             return {
                 "story_content": story_text,

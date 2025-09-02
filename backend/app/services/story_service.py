@@ -59,32 +59,38 @@ class StoryService:
                     total_context_chars = sum(len(ch) for ch in previous_chapters)
                     logger.info(f"Providing {len(previous_chapters)} previous chapters, {total_context_chars} total chars for story continuity")
                 
-                # Get previous choices and convert to expected format
-                if story_session.choices_made:
-                    previous_choices = []
-                    for choice_data in story_session.choices_made:
-                        choice_id = choice_data.get("choice_id")
-                        option_index = choice_data.get("option_index", 0)
-                        
-                        # Handle custom user input choices differently
-                        if choice_id == "custom-choice" and "chosen_option" in choice_data:
-                            previous_choices.append({
-                                "question": choice_data.get("question", "Custom user input"),
-                                "chosen_option": choice_data["chosen_option"]
-                            })
-                        elif choice_id and str(choice_id).isdigit():
-                            # Handle database stored choices
-                            choice = self.db.query(Choice).filter(Choice.id == int(choice_id)).first()
-                            if choice and choice.choices_data and option_index < len(choice.choices_data):
-                                chosen_option_text = choice.choices_data[option_index].get("text", "Unknown option")
-                                previous_choices.append({
+                # Get ONLY the last choice made (for the previous chapter) for context
+                # Don't accumulate all choices from all chapters
+                if story_session.choices_made and len(story_session.choices_made) > 0:
+                    # Get only the most recent choice for story continuity
+                    last_choice_data = story_session.choices_made[-1]
+                    choice_id = last_choice_data.get("choice_id")
+                    option_index = last_choice_data.get("option_index", 0)
+                    
+                    # Handle custom user input choices differently
+                    if choice_id == "custom-choice" and "chosen_option" in last_choice_data:
+                        previous_choices = [{
+                            "question": last_choice_data.get("question", "Custom user input"),
+                            "chosen_option": last_choice_data["chosen_option"]
+                        }]
+                    elif choice_id and str(choice_id).isdigit():
+                        # Handle database stored choices
+                        choice = self.db.query(Choice).filter(Choice.id == int(choice_id)).first()
+                        if choice and choice.choices_data and option_index < len(choice.choices_data):
+                            chosen_option_text = choice.choices_data[option_index].get("text", "")
+                            if chosen_option_text:  # Only add if there's actual text
+                                previous_choices = [{
                                     "question": choice.question,
                                     "chosen_option": chosen_option_text
-                                })
-                    
-                    # If no valid choices found, use empty list
-                    if not previous_choices:
+                                }]
+                            else:
+                                previous_choices = []
+                        else:
+                            previous_choices = []
+                    else:
                         previous_choices = []
+                else:
+                    previous_choices = []
             
             initial_state = StoryGenerationState(
                 child_preferences=child.reading_preferences,

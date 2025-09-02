@@ -260,14 +260,16 @@ async def generate_story(
             db.add(choice)
             db.flush()
             
-            # Add database ID to choice data for frontend
+            # Add database ID to choice data for frontend - use ONLY what LLM provided
             choice_with_id = {
                 "id": str(choice.id),  # Convert to string for frontend
-                "text": choice_data.get("text", "Continue"),
+                "text": choice_data.get("text", ""),  # No default fallback
                 "description": choice_data.get("description", ""),
-                "impact": choice_data.get("description", "See what happens next")
+                "impact": choice_data.get("description", "")  # No default fallback
             }
-            choices_with_ids.append(choice_with_id)
+            # Only add valid choices with actual text
+            if choice_with_id["text"]:
+                choices_with_ids.append(choice_with_id)
             
             # Create StoryBranch for this choice option
             # For now, create a simple continuation branch
