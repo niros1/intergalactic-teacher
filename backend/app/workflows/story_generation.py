@@ -217,12 +217,10 @@ def create_story_prompt(state: StoryGenerationState) -> str:
         "{",
         "\"story_content\": \"ONLY the pure story text that continues seamlessly from previous chapters\",",
         "\"choices\": [",
-        "  {\"text\": \"Talk to Luna about the map\", \"description\": \"Learn more about the treasure map\"},",
-        "  {\"text\": \"Follow the path through the forest\", \"description\": \"Explore the mysterious forest path\"},",
-        "  {\"text\": \"Help prepare for the festival\", \"description\": \"Join in the festival preparations\"}",
-        "],",
-        "\"educational_elements\": [\"Teamwork\", \"Problem solving\"],",
-        "\"vocabulary_words\": [\"treasure\", \"mysterious\", \"festival\"]",
+        "  {\"text\": \"Choice 1 text\", \"description\": \"Optional description\"},",
+        "  {\"text\": \"Choice 2 text\", \"description\": \"Optional description\"},",
+        "  {\"text\": \"Choice 3 text\", \"description\": \"Optional description\"}",
+        "]",
         "}"
     ])
     
