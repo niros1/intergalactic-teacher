@@ -6,7 +6,7 @@ import {
   ThreadPrimitive,
 } from "@assistant-ui/react";
 import type { FC } from "react";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   ArrowDownIcon,
   CheckIcon,
@@ -18,6 +18,8 @@ import {
   SendHorizontalIcon,
   Volume2Icon,
   VolumeXIcon,
+  MicIcon,
+  MicOffIcon,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 
@@ -25,6 +27,7 @@ import { Button } from "./button";
 import { MarkdownText } from "./markdown-text";
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { useChildStore } from "../../stores/childStore";
+import { useSpeechRecognition } from "../../hooks/useSpeechRecognition";
 
 export const StoryThread: FC = () => {
   const { currentChild } = useChildStore();
@@ -157,16 +160,94 @@ const StoryComposer: FC = () => {
   const { currentChild } = useChildStore();
   const isHebrew = currentChild?.language === 'hebrew';
   
+  const {
+    transcript,
+    isListening,
+    hasRecognitionSupport,
+    startListening,
+    stopListening,
+    resetTranscript,
+    error,
+  } = useSpeechRecognition();
+
+  // Auto-append transcript to the input using the composer's append method
+  useEffect(() => {
+    if (transcript && transcript.trim()) {
+      // Get the current input element and append the transcript
+      const inputElement = document.querySelector('.aui-composer-input') as HTMLTextAreaElement;
+      if (inputElement) {
+        const currentValue = inputElement.value;
+        inputElement.value = currentValue + transcript;
+        // Trigger input event to update the composer state
+        inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      resetTranscript();
+    }
+  }, [transcript, resetTranscript]);
+
+  const handleMicrophoneClick = () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      const language = isHebrew ? 'he-IL' : 'en-US';
+      startListening({ 
+        language,
+        continuous: false,
+        interimResults: true 
+      });
+    }
+  };
+  
   return (
-    <ComposerPrimitive.Root className="aui-composer-root">
-      <ComposerPrimitive.Input
-        rows={1}
-        autoFocus
-        placeholder={isHebrew ? "כתוב הודעה..." : "Write a message..."}
-        className="aui-composer-input"
-      />
-      <StoryComposerAction />
-    </ComposerPrimitive.Root>
+    <div className="relative">
+      <ComposerPrimitive.Root className="aui-composer-root">
+        <ComposerPrimitive.Input
+          rows={1}
+          autoFocus
+          placeholder={isHebrew ? "כתוב הודעה או לחץ על המיקרופון..." : "Write a message or click the microphone..."}
+          className="aui-composer-input"
+        />
+        
+        <div className="flex items-center space-x-2">
+          {/* Microphone Button */}
+          {hasRecognitionSupport && (
+            <TooltipIconButton
+              tooltip={isHebrew ? 
+                (isListening ? "עצור הקלטה" : "הקלט קול") : 
+                (isListening ? "Stop recording" : "Record voice")
+              }
+              variant={isListening ? "destructive" : "outline"}
+              className={cn(
+                "aui-composer-microphone relative",
+                isListening && "animate-pulse bg-red-500 hover:bg-red-600"
+              )}
+              onClick={handleMicrophoneClick}
+            >
+              {isListening ? (
+                <>
+                  <MicOffIcon />
+                  {/* Pulsing recording indicator */}
+                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-400 rounded-full animate-ping" />
+                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full" />
+                </>
+              ) : (
+                <MicIcon />
+              )}
+            </TooltipIconButton>
+          )}
+          
+          <StoryComposerAction />
+        </div>
+      </ComposerPrimitive.Root>
+      
+      {/* Speech Recognition Error */}
+      {error && (
+        <div className="absolute bottom-full left-0 right-0 mb-2 p-2 bg-red-100 border border-red-300 rounded-lg text-red-700 text-sm z-10">
+          <span className="text-lg mr-2">⚠️</span>
+          {error}
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -275,25 +356,80 @@ const StoryMessageText: FC<{ content: string }> = ({ content }) => {
   const isHebrew = currentChild?.language === 'hebrew';
   const [isPlaying, setIsPlaying] = useState(false);
 
-  const handleTextToSpeech = () => {
-    if ('speechSynthesis' in window) {
-      if (window.speechSynthesis.speaking) {
+  // Cleanup on unmount - stop any ongoing speech
+  useEffect(() => {
+    return () => {
+      if (window.speechSynthesis && window.speechSynthesis.speaking) {
         window.speechSynthesis.cancel();
-        setIsPlaying(false);
-        return;
       }
+    };
+  }, []);
 
-      const utterance = new SpeechSynthesisUtterance(content);
-      utterance.lang = isHebrew ? 'he-IL' : 'en-US';
-      utterance.rate = 0.8;
-      utterance.pitch = 1.1;
-      
-      utterance.onstart = () => setIsPlaying(true);
-      utterance.onend = () => setIsPlaying(false);
-      utterance.onerror = () => setIsPlaying(false);
-      
-      window.speechSynthesis.speak(utterance);
+  const handleTextToSpeech = () => {
+    console.log('Story thread - handleTextToSpeech called with content:', content);
+    
+    // Check if Speech Synthesis API is supported
+    if (!('speechSynthesis' in window)) {
+      console.error('Speech Synthesis API is not supported in this browser');
+      alert(isHebrew ? 'הדפדפן לא תומך בהקראה' : 'Text-to-speech is not supported in this browser');
+      return;
     }
+
+    // If currently playing, stop it
+    if (window.speechSynthesis.speaking) {
+      console.log('Cancelling current speech');
+      window.speechSynthesis.cancel();
+      setIsPlaying(false);
+      return;
+    }
+
+    // Validate content
+    if (!content || content.trim().length === 0) {
+      console.warn('No content to speak');
+      return;
+    }
+
+    // Wait a bit to ensure any previous cancellation completes
+    setTimeout(() => {
+      const utterance = new SpeechSynthesisUtterance(content);
+      
+      // Set language and voice parameters
+      utterance.lang = isHebrew ? 'he-IL' : 'en-US';
+      utterance.rate = 0.8; // Slightly slower for better comprehension
+      utterance.pitch = 1.1; // Slightly higher pitch for children
+      utterance.volume = 1.0; // Full volume
+      
+      // Set up event handlers with detailed logging
+      utterance.onstart = () => {
+        console.log('Story thread - Speech started successfully');
+        setIsPlaying(true);
+      };
+      
+      utterance.onend = () => {
+        console.log('Story thread - Speech ended');
+        setIsPlaying(false);
+      };
+      
+      utterance.onerror = (event) => {
+        console.error('Story thread - Speech error:', event.error, event);
+        setIsPlaying(false);
+        
+        // Show user-friendly error message
+        const errorMessage = isHebrew ? 
+          'שגיאה בהקראת הטקסט' : 
+          'Error playing audio';
+        alert(errorMessage);
+      };
+
+      // Start speaking
+      try {
+        window.speechSynthesis.speak(utterance);
+        console.log('Story thread - Speech synthesis started successfully');
+      } catch (error) {
+        console.error('Story thread - Error starting speech synthesis:', error);
+        setIsPlaying(false);
+      }
+    }, 100); // Small delay to ensure cancellation completes
   };
 
   return (
