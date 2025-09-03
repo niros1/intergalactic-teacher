@@ -27,7 +27,8 @@ class StoryService:
         child: Child, 
         theme: str,
         chapter_number: int = 1,
-        story_session: Optional[StorySession] = None
+        story_session: Optional[StorySession] = None,
+        custom_user_input: Optional[str] = None
     ) -> Dict:
         """Generate a personalized story for a child using LangGraph workflow."""
         try:
@@ -36,33 +37,60 @@ class StoryService:
             previous_choices = []
             
             if story_session and story_session.story:
-                # Get previous chapters
-                story_content = story_session.story.content
-                if story_content:
-                    # Split story into chapters (simple implementation)
-                    chapters = story_content.split("\n\n---\n\n")
-                    previous_chapters = chapters[:chapter_number-1]
+                # Get previous chapters from story_chapters table
+                previous_chapter_records = self.db.query(StoryChapter).filter(
+                    StoryChapter.story_id == story_session.story_id,
+                    StoryChapter.chapter_number < chapter_number
+                ).order_by(StoryChapter.chapter_number).all()
                 
-                # Get previous choices and convert to expected format
-                if story_session.choices_made:
-                    previous_choices = []
-                    for choice_data in story_session.choices_made:
-                        # Get the actual choice from database
-                        choice_id = choice_data.get("choice_id")
-                        option_index = choice_data.get("option_index", 0)
-                        
-                        if choice_id:
-                            choice = self.db.query(Choice).filter(Choice.id == choice_id).first()
-                            if choice and choice.choices_data and option_index < len(choice.choices_data):
-                                chosen_option_text = choice.choices_data[option_index].get("text", "Unknown option")
-                                previous_choices.append({
+                # Extract chapter content with better context management
+                previous_chapters = []
+                for chapter_record in previous_chapter_records:
+                    # Clean and prepare chapter content for context
+                    content = chapter_record.content.strip()
+                    if content:
+                        # Ensure content is readable and not too fragmented
+                        previous_chapters.append(content)
+                
+                logger.info(f"✅ Found {len(previous_chapter_records)} previous chapters for story continuity")
+                
+                # Log context info for debugging
+                if previous_chapters:
+                    total_context_chars = sum(len(ch) for ch in previous_chapters)
+                    logger.info(f"Providing {len(previous_chapters)} previous chapters, {total_context_chars} total chars for story continuity")
+                
+                # Get ONLY the last choice made (for the previous chapter) for context
+                # Don't accumulate all choices from all chapters
+                if story_session.choices_made and len(story_session.choices_made) > 0:
+                    # Get only the most recent choice for story continuity
+                    last_choice_data = story_session.choices_made[-1]
+                    choice_id = last_choice_data.get("choice_id")
+                    option_index = last_choice_data.get("option_index", 0)
+                    
+                    # Handle custom user input choices differently
+                    if choice_id == "custom-choice" and "chosen_option" in last_choice_data:
+                        previous_choices = [{
+                            "question": last_choice_data.get("question", "Custom user input"),
+                            "chosen_option": last_choice_data["chosen_option"]
+                        }]
+                    elif choice_id and str(choice_id).isdigit():
+                        # Handle database stored choices
+                        choice = self.db.query(Choice).filter(Choice.id == int(choice_id)).first()
+                        if choice and choice.choices_data and option_index < len(choice.choices_data):
+                            chosen_option_text = choice.choices_data[option_index].get("text", "")
+                            if chosen_option_text:  # Only add if there's actual text
+                                previous_choices = [{
                                     "question": choice.question,
                                     "chosen_option": chosen_option_text
-                                })
-                    
-                    # If no valid choices found, use empty list
-                    if not previous_choices:
+                                }]
+                            else:
+                                previous_choices = []
+                        else:
+                            previous_choices = []
+                    else:
                         previous_choices = []
+                else:
+                    previous_choices = []
             
             initial_state = StoryGenerationState(
                 child_preferences=child.reading_preferences,
@@ -70,6 +98,7 @@ class StoryService:
                 chapter_number=chapter_number,
                 previous_chapters=previous_chapters,
                 previous_choices=previous_choices,
+                custom_user_input=custom_user_input,
                 story_content="",
                 choices=[],
                 safety_score=0.0,
@@ -80,8 +109,25 @@ class StoryService:
                 educational_elements=[]
             )
             
-            # Run the story generation workflow
-            result = story_workflow.invoke(initial_state)
+            # Log context information for debugging
+            logger.info(f"Story generation for chapter {chapter_number}: {len(previous_chapters)} previous chapters, {len(previous_choices)} previous choices")
+            
+            # Run the story generation workflow with tracing metadata
+            result = story_workflow.invoke(
+                initial_state,
+                config={
+                    "metadata": {
+                        "child_id": child.id,
+                        "child_name": child.name,
+                        "theme": theme,
+                        "chapter_number": chapter_number,
+                        "has_custom_input": bool(custom_user_input),
+                        "previous_chapters_count": len(previous_chapters),
+                        "previous_choices_count": len(previous_choices)
+                    },
+                    "tags": ["story_generation", f"chapter_{chapter_number}", theme]
+                }
+            )
             
             return {
                 "success": True,
@@ -113,16 +159,16 @@ class StoryService:
         """Create a new story with AI-generated content."""
         try:
             # Generate the first chapter
-            generation_result = self.generate_personalized_story(child, theme, 1)
+            generation_result = self.generate_personalized_story(child, theme, 1, None, None)
             
             if not generation_result["success"]:
                 logger.error(f"Failed to generate story: {generation_result.get('error')}")
                 return None
             
-            # Create the story record (without content - stored in chapters)
+            # Create the story record (content now stored in chapters table)
             story = Story(
                 title=title,
-                content="",  # Content will be stored in chapters
+                # content field removed - now using story_chapters table
                 language=child.language_preference,
                 difficulty_level=child.reading_level,
                 themes=[theme],
@@ -251,30 +297,25 @@ class StoryService:
                 StorySession.story_id == story.id
             ).order_by(StorySession.last_accessed.desc()).first()
             
-            # Get the content for the current chapter from chapters table
+            # Get the content for ALL chapters from chapters table
             current_chapter = session.current_chapter if session else 1
             
-            # Get the current chapter from the chapters table
-            chapter_record = self.db.query(StoryChapter).filter(
-                StoryChapter.story_id == story.id,
-                StoryChapter.chapter_number == current_chapter
-            ).first()
+            # Get all existing chapters for this story (for display in chat interface)
+            # This allows users to see the full story context when they refresh
+            all_chapters = self.db.query(StoryChapter).filter(
+                StoryChapter.story_id == story.id
+            ).order_by(StoryChapter.chapter_number).all()
             
-            # Use chapter content if available, otherwise fall back to story content
-            if chapter_record:
-                chapter_content = chapter_record.content
-            elif story.content:
-                # Fallback for legacy stories - split content by chapter markers
-                if "\n\n---\n\n" in story.content:
-                    chapters = story.content.split("\n\n---\n\n")
-                    if current_chapter <= len(chapters):
-                        chapter_content = chapters[current_chapter - 1]
-                    else:
-                        chapter_content = chapters[-1] if chapters else story.content
-                else:
-                    chapter_content = story.content
+            # Build content array with all chapters from story_chapters table
+            all_content = []
+            if all_chapters:
+                # Use chapters from database - this is now the primary source for all chapters
+                for chapter in all_chapters:
+                    all_content.append(chapter.content)
             else:
-                chapter_content = "Chapter content not available"
+                # No chapters found in story_chapters table
+                all_content = ["Chapter content not available"]
+            
             
             # Get choices for current chapter if they exist
             choices_data = []
@@ -315,7 +356,7 @@ class StoryService:
                 'id': story.id,
                 'title': story.title,
                 'description': story.description,
-                'content': chapter_content,  # Now returns only current chapter content
+                'content': all_content,  # Now returns ALL chapters as array
                 'language': story.language,
                 'difficulty_level': story.difficulty_level,
                 'themes': story.themes,
@@ -481,7 +522,8 @@ class StoryService:
                 child=child,
                 theme=story_session.story.themes[0] if story_session.story.themes else "adventure",
                 chapter_number=story_branch.leads_to_chapter or choice.chapter_number + 1,
-                story_session=story_session
+                story_session=story_session,
+                custom_user_input=None
             )
             
             if generation_result["success"]:

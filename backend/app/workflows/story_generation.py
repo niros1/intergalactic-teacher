@@ -1,16 +1,46 @@
 """LangGraph workflow for story generation with personalization and safety checks."""
 
-from typing import Any, Dict, List, TypedDict
-import json
+from typing import Any, Dict, List, Optional, TypedDict
 import logging
+import os
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.pydantic_v1 import BaseModel, Field
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_ollama import ChatOllama
 from langgraph.graph import END, StateGraph
+# Removed unused LangSmith imports - tracing is handled automatically
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+# Configure LangSmith tracing if environment variables are set
+if os.getenv("LANGSMITH_TRACING", "").lower() == "true":
+    logger.info("LangSmith tracing enabled for project: %s", os.getenv("LANGSMITH_PROJECT", "default"))
+else:
+    logger.info("LangSmith tracing is not enabled")
+
+
+# Pydantic models for structured output
+class Choice(BaseModel):
+    """Model for story choices."""
+    text: str = Field(..., description="The choice text that the child will see")
+    description: str = Field("", description="Optional description providing more context about the choice")
+
+
+class StoryContent(BaseModel):
+    """Model for complete story generation output."""
+    story_content: str = Field(..., description="The main story content for this chapter, written in direct storytelling voice")
+    choices: List[Choice] = Field(..., description="List of 2-4 choices for the child to make to continue the story")
+    educational_elements: List[str] = Field(
+        default=["Reading comprehension", "Decision making"], 
+        description="Educational elements present in this chapter"
+    )
+    vocabulary_words: List[str] = Field(
+        default=[], 
+        description="List of challenging or educational vocabulary words used in this chapter"
+    )
 
 
 class StoryGenerationState(TypedDict):
@@ -21,6 +51,7 @@ class StoryGenerationState(TypedDict):
     chapter_number: int
     previous_chapters: List[str]
     previous_choices: List[Dict]
+    custom_user_input: Optional[str]  # New field for custom user messages
     
     # Generated content
     story_content: str
@@ -37,16 +68,145 @@ class StoryGenerationState(TypedDict):
     educational_elements: List[str]
 
 
+def create_story_summary(chapter_content: str, chapter_num: int = 0) -> str:
+    """Create a structured summary of a chapter focusing on key story elements."""
+    # Extract key information (simplified approach - could be enhanced with LLM summarization)
+    words = chapter_content.split()
+    
+    # Take first and last portions to capture beginning and end events
+    if len(words) <= 100:
+        summary = chapter_content
+    else:
+        # Take first 60 words and last 40 words for beginning/end context
+        beginning = ' '.join(words[:60])
+        ending = ' '.join(words[-40:])
+        summary = f"{beginning}... {ending}"
+    
+    return summary[:400]  # Limit to 400 chars for consistency
+
+
+# JSON formatting helper functions removed - no longer needed with structured output
+
+
 def create_story_prompt(state: StoryGenerationState) -> str:
-    """Create a personalized story generation prompt."""
+    """Create a personalized story generation prompt with enhanced previous chapters context."""
     prefs = state["child_preferences"]
     theme = state["story_theme"]
     chapter_num = state["chapter_number"]
+    logger.info(f"Generating chapter {chapter_num} with {len(state['previous_chapters'])} previous chapters for context")
     
     # Base prompt structure
     prompt_parts = [
-        f"You are a creative children's story writer specializing in interactive narratives for children aged {prefs.get('age', 9)}.",
-        f"Create Chapter {chapter_num} of an engaging story with the theme: {theme}",
+        f"You are a storyteller narrating directly to a child aged {prefs.get('age', 9)}. Write as if you are telling the story in person.",
+        f"Continue the {theme} story. Write Chapter {chapter_num} naturally and engagingly, building upon the established story.",
+        "",
+        "CHILD PROFILE:",
+        f"- Age: {prefs.get('age')} years old",
+        f"- Language: {prefs.get('language', 'english')}",
+        f"- Reading Level: {prefs.get('reading_level', 'beginner')}",
+        f"- Interests: {', '.join(prefs.get('interests', []))}",
+        f"- Vocabulary Level: {prefs.get('vocabulary_level', 50)}/100",
+        "",
+        "WRITING STYLE:",
+        "- Write in direct storytelling voice (no meta-commentary like 'Here is Chapter X' or 'story_content:')",
+        "- Start immediately with the story content",
+        "- Write 3-5 engaging paragraphs",
+        "- Use vocabulary appropriate for the reading level with 2-3 challenging words",
+        "- Include diverse characters and positive values",
+        "- Make it naturally flow as if told by a storyteller",
+    ]
+    
+    # Add enhanced context from previous chapters - OPTIMIZED FOR STORY CONTINUITY
+    if state["previous_chapters"]:
+        prompt_parts.extend([
+            "",
+            "📖 STORY CONTEXT - What happened before:",
+            "Use this information to maintain perfect story continuity:"
+        ])
+        
+        # Add chapter summaries for context
+        chapter_summaries = []
+        for i, chapter in enumerate(state["previous_chapters"]):
+            # Create focused summary
+            summary = create_story_summary(chapter, i+1)
+            chapter_summaries.append(f"Chapter {i+1}: {summary}")
+        
+        # Add chapter summaries
+        prompt_parts.extend(chapter_summaries)
+        
+        prompt_parts.extend([
+            "",
+            "✨ CONTINUITY REQUIREMENTS:",
+            "- Reference and build upon characters, relationships, and events from previous chapters",
+            "- Maintain the established tone, world-building, and character personalities",
+            "- Create natural story progression that acknowledges what came before",
+            "- Use character names and reference previous events when relevant",
+            f"- This is Chapter {chapter_num}, so the story should feel like a natural continuation"
+        ])
+    
+    # Add choice context with enhanced formatting
+    if state["previous_choices"]:
+        prompt_parts.extend([
+            "",
+            "🎯 PREVIOUS STORY DECISIONS:",
+            "The child made these choices that shaped the story:"
+        ])
+        
+        for choice in state["previous_choices"]:
+            prompt_parts.append(f"• {choice['question']}: '{choice['chosen_option']}'")
+        
+        prompt_parts.append("→ Continue the story honoring these decisions and their consequences.")
+    
+    # Add custom user input context
+    if state.get("custom_user_input"):
+        prompt_parts.extend([
+            "",
+            "CUSTOM USER INPUT:",
+            f"The child has expressed: \"{state['custom_user_input']}\"",
+            "Please incorporate this message naturally into the story progression and respond to it meaningfully.",
+            "The story should acknowledge and build upon what the child has said or requested."
+        ])
+    
+    prompt_parts.extend([
+        "", 
+        "⚠️ CRITICAL: The story_content must feel like a natural continuation of the previous chapters.",
+        "Reference characters, events, and settings established earlier. Make the reader feel",
+        "the story is building coherently toward something meaningful.",
+        "---------",
+        "OUTPUT FORMAT MUST BE VALID JSON !!!",
+        "Follow this JSON output example:",
+        "{",
+        "\"story_content\": \"ONLY the pure story text that continues seamlessly from previous chapters\",",
+        "\"choices\": [",
+        "  {\"text\": \"Choice 1 text\", \"description\": \"Optional description\"},",
+        "  {\"text\": \"Choice 2 text\", \"description\": \"Optional description\"},",
+        "  {\"text\": \"Choice 3 text\", \"description\": \"Optional description\"}",
+        "]",
+        "}"
+    ])
+    
+    # Ensure the prompt isn't too long for the LLM
+    full_prompt = "\n".join(prompt_parts)
+    
+    # Log prompt length for debugging
+    word_count = len(full_prompt.split())
+    if word_count > 1500:
+        logger.warning(f"Prompt is quite long ({word_count} words) - consider shortening for better performance")
+    
+    return full_prompt
+
+
+def create_story_prompt_for_structured_output(state: StoryGenerationState) -> str:
+    """Create a personalized story generation prompt optimized for structured output."""
+    prefs = state["child_preferences"]
+    theme = state["story_theme"]
+    chapter_num = state["chapter_number"]
+    logger.info(f"Generating structured prompt for chapter {chapter_num} with {len(state['previous_chapters'])} previous chapters for context")
+    
+    # Base prompt structure - optimized for structured output
+    prompt_parts = [
+        f"Create Chapter {chapter_num} of a {theme} story for a {prefs.get('age', 9)}-year-old child.",
+        f"Write as if you are telling the story directly to the child in person.",
         "",
         "CHILD PROFILE:",
         f"- Age: {prefs.get('age')} years old",
@@ -56,49 +216,69 @@ def create_story_prompt(state: StoryGenerationState) -> str:
         f"- Vocabulary Level: {prefs.get('vocabulary_level', 50)}/100",
         "",
         "STORY REQUIREMENTS:",
-        "- Write 3-5 paragraphs appropriate for the child's reading level",
-        "- Include vocabulary that matches their level with 2-3 slightly challenging words",
-        "- Make it educational but fun and engaging",
+        "- Write 3-5 engaging paragraphs for story_content",
+        "- Start immediately with the story (no meta-commentary)",
+        "- Use vocabulary appropriate for the reading level with 2-3 challenging words",
         "- Include diverse characters and positive values",
-        "- Ensure cultural sensitivity",
-        "- End with a meaningful choice point for the child",
+        "- Provide 2-4 meaningful choices that advance the story",
     ]
     
-    # Add context from previous chapters
+    # Add enhanced context from previous chapters
     if state["previous_chapters"]:
         prompt_parts.extend([
             "",
-            "STORY CONTEXT (Previous chapters):",
-            *[f"Chapter {i+1}: {chapter[:200]}..." for i, chapter in enumerate(state["previous_chapters"])]
+            "STORY CONTEXT - What happened before:",
+        ])
+        
+        # Add chapter summaries for context
+        for i, chapter in enumerate(state["previous_chapters"]):
+            summary = create_story_summary(chapter, i+1)
+            prompt_parts.append(f"Chapter {i+1}: {summary}")
+        
+        prompt_parts.extend([
+            "",
+            "CONTINUITY REQUIREMENTS:",
+            "- Reference and build upon characters, relationships, and events from previous chapters",
+            "- Maintain established tone, world-building, and character personalities",
+            "- Create natural story progression that acknowledges what came before",
+            f"- This is Chapter {chapter_num}, continue the established narrative"
         ])
     
     # Add choice context
     if state["previous_choices"]:
         prompt_parts.extend([
             "",
-            "PREVIOUS CHOICES MADE:",
-            *[f"- {choice['question']}: {choice['chosen_option']}" for choice in state["previous_choices"]]
+            "PREVIOUS STORY DECISIONS:",
+        ])
+        
+        for choice in state["previous_choices"]:
+            prompt_parts.append(f"• {choice['question']}: '{choice['chosen_option']}'")
+        
+        prompt_parts.append("→ Honor these decisions and their consequences in the story.")
+    
+    # Add custom user input context
+    if state.get("custom_user_input"):
+        prompt_parts.extend([
+            "",
+            "CUSTOM USER INPUT:",
+            f"The child has expressed: \"{state['custom_user_input']}\"",
+            "Incorporate this naturally into the story progression and respond meaningfully.",
         ])
     
     prompt_parts.extend([
-        "",
-        "OUTPUT FORMAT:",
-        "Return a JSON object with:",
-        "- story_content: The chapter text",
-        "- choices: Array of 2-3 choice options, each with 'text' and 'description'",
-        "- educational_elements: Array of learning opportunities in this chapter",
-        "- vocabulary_words: Array of challenging words used",
-        "",
-        "Example choices format:",
-        '[{"text": "Help the character", "description": "Show kindness and empathy"}, ...]'
+        "", 
+        "IMPORTANT: Ensure story_content flows naturally from previous chapters.",
+        "Reference characters, events, and settings established earlier.",
+        "The response will be automatically structured with the required fields.",
     ])
     
     return "\n".join(prompt_parts)
 
 
 def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
-    """Generate story content using Ollama."""
+    """Generate story content using Ollama with structured output."""
     try:
+        # Initialize the base LLM
         llm = ChatOllama(
             model=settings.OLLAMA_MODEL,
             base_url=settings.OLLAMA_BASE_URL,
@@ -106,116 +286,41 @@ def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
             num_predict=settings.OLLAMA_MAX_TOKENS,
         )
         
-        # Create the prompt
-        prompt = create_story_prompt(state)
+        # Create structured LLM that auto-guides to JSON matching StoryContent schema
+        structured_llm = llm.with_structured_output(StoryContent)
         
-        # Generate content
-        messages = [
-            SystemMessage(content="You are an expert children's story writer creating educational, engaging, and safe content."),
-            HumanMessage(content=prompt)
-        ]
+        # Create the personalized prompt
+        prompt_text = create_story_prompt_for_structured_output(state)
         
-        response = llm.invoke(messages)
-        content = response.content.strip()
+        # Create a structured prompt template
+        prompt_template = ChatPromptTemplate.from_messages([
+            ("system", "You are an expert children's story writer creating educational, engaging, and safe content. You must respond with the exact fields specified in the schema."),
+            ("user", "{prompt}")
+        ])
         
-        # Try to parse JSON response
-        try:
-            # Extract JSON from various formats the model might return
-            json_content = content
-            
-            # Check if content has markdown code blocks
-            if "```json" in content:
-                start = content.find("```json") + 7
-                end = content.find("```", start)
-                if end > start:
-                    json_content = content[start:end].strip()
-            elif "```" in content:
-                start = content.find("```") + 3
-                end = content.find("```", start)
-                if end > start:
-                    json_content = content[start:end].strip()
-            
-            # Try to find JSON object in the content
-            if "{" in json_content:
-                start = json_content.find("{")
-                end = json_content.rfind("}") + 1
-                if end > start:
-                    json_content = json_content[start:end]
-            
-            story_data = json.loads(json_content)
-            
-            # Extract the actual story content and choices
-            story_text = story_data.get("story_content", "")
-            # Clean up any escape characters and formatting
-            story_text = story_text.replace('\\n', '\n').replace('\\"', '"').strip()
-            choices = story_data.get("choices", [])
-            
-            # Ensure choices is a proper list
-            if not isinstance(choices, list):
-                choices = []
-            
-            # Validate choice structure
-            valid_choices = []
-            for choice in choices:
-                if isinstance(choice, dict) and "text" in choice:
-                    valid_choices.append({
-                        "text": choice.get("text", ""),
-                        "description": choice.get("description", "")
-                    })
-            
-            if not valid_choices:
-                # Provide default choices if none are valid
-                valid_choices = [
-                    {"text": "Continue the adventure", "description": "See what happens next"},
-                    {"text": "Make a different choice", "description": "Try a different path"}
-                ]
-            
-            return {
-                "story_content": story_text,
-                "choices": valid_choices,
-                "educational_elements": story_data.get("educational_elements", ["Reading comprehension", "Decision making"]),
-                "vocabulary_words": story_data.get("vocabulary_words", []),
-            }
-            
-        except (json.JSONDecodeError, Exception) as e:
-            logger.warning(f"Failed to parse JSON response: {e}, using fallback")
-            # Extract any readable text from the content
-            clean_content = content
-            
-            # Remove common JSON artifacts
-            clean_content = clean_content.replace('```json', '').replace('```', '')
-            clean_content = clean_content.replace('Here is Chapter 1 of the story:', '')
-            clean_content = clean_content.replace('Please let me know if you\'d like me to continue', '')
-            
-            # Try to extract story_content value if present
-            if "story_content" in clean_content:
-                import re
-                # Try to extract content between quotes after story_content
-                match = re.search(r'"story_content"\s*:\s*"([^"]+)"', clean_content, re.DOTALL)
-                if match:
-                    clean_content = match.group(1)
-                    clean_content = clean_content.replace('\\n', '\n').replace('\\"', '"')
-            
-            # Remove any remaining JSON structure
-            clean_content = re.sub(r'[{}\[\]"]', '', clean_content)
-            clean_content = re.sub(r'\s+', ' ', clean_content).strip()
-            
-            # If content is too messy, provide a simple fallback story
-            if len(clean_content) < 50 or '{' in clean_content:
-                clean_content = "Once upon a time in a magical forest, there lived a curious little rabbit named Rosie. She loved to explore and make new friends. Today was going to be a special adventure!"
-            
-            return {
-                "story_content": clean_content[:1000],  # Reasonable length
-                "choices": [
-                    {"text": "Continue the adventure", "description": "See what happens next"},
-                    {"text": "Make a different choice", "description": "Try a different path"}
-                ],
-                "educational_elements": ["Reading comprehension", "Decision making"],
-                "vocabulary_words": [],
-            }
-            
+        # Create the chain: prompt -> structured_llm
+        chain = prompt_template | structured_llm
+        
+        # Invoke the chain to get structured output
+        logger.info("Generating story content with structured output...")
+        result: StoryContent = chain.invoke({"prompt": prompt_text})
+        
+        logger.info(f"Generated structured story content successfully")
+        logger.info(f"Story content length: {len(result.story_content)} characters")
+        logger.info(f"Number of choices: {len(result.choices)}")
+        
+        # Convert to dictionary format expected by the workflow
+        return {
+            "story_content": result.story_content,
+            "choices": [choice.dict() for choice in result.choices],
+            "educational_elements": result.educational_elements,
+            "vocabulary_words": result.vocabulary_words,
+        }
+        
     except Exception as e:
-        logger.error(f"Error generating story content: {e}")
+        logger.error(f"Error generating story content with structured output: {e}")
+        # Log the full error for debugging
+        logger.error(f"Full error details: {str(e)}")
         raise
 
 
@@ -345,7 +450,7 @@ def should_regenerate_content(state: StoryGenerationState) -> str:
 
 # Create the workflow graph
 def create_story_generation_workflow():
-    """Create the story generation workflow graph."""
+    """Create the story generation workflow graph with LangSmith tracing."""
     
     workflow = StateGraph(StoryGenerationState)
     
@@ -373,7 +478,15 @@ def create_story_generation_workflow():
     workflow.add_edge("enhance_content", "safety_check")  # Re-check after enhancement
     workflow.add_edge("calculate_metrics", END)
     
-    return workflow.compile()
+    # Compile with checkpointer for better tracing
+    compiled_workflow = workflow.compile()
+    
+    # Add metadata for LangSmith tracing
+    if os.getenv("LANGSMITH_TRACING", "").lower() == "true":
+        compiled_workflow.name = "story_generation_workflow"
+        logger.info("Story generation workflow compiled with LangSmith tracing")
+    
+    return compiled_workflow
 
 
 # Create a singleton instance

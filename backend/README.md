@@ -147,7 +147,7 @@ REDIS_URL=redis://localhost:6379/0
 
 # Security
 SECRET_KEY=your-secret-key-here
-ACCESS_TOKEN_EXPIRE_MINUTES=30
+ACCESS_TOKEN_EXPIRE_MINUTES=3000
 
 # OpenAI
 OPENAI_API_KEY=your-openai-api-key

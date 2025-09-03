@@ -1,4 +1,4 @@
-- "always check if there is a sub agnet that is suitable for a task, if not take it on your own"
+- "always check if there is a sub agnet that is suitable for a task, always prefer using sub agent"
 - when update beackend code run "docker-compose up --build -d api"
 - DO NOT GENERATE MOCK DATA AND CODE - WE ARE IN REAL SYSTEM
-- be docker compose reside in backend directory
+- BE docker compose reside in backend directory

@@ -24,6 +24,7 @@ langchain==0.3.27
 langchain-ollama==0.3.7
 langchain-community==0.3.27
 langchain-core==0.3.74
+langsmith>=0.1.0
 ollama>=0.5.3
 
 # Data Validation

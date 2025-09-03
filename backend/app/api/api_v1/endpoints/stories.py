@@ -172,24 +172,15 @@ async def generate_story(
                 detail="Child not found"
             )
         
-        # Check rate limiting for story generation
-        is_allowed, remaining = await redis_client.rate_limit_check(
-            f"story_generation:{current_user.id}",
-            limit=10,  # 10 generations per hour
-            window=3600
-        )
-        
-        if not is_allowed:
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"Story generation rate limit exceeded. Try again later."
-            )
+        # Rate limiting disabled for development
         
         # Generate the story
         result = story_service.generate_personalized_story(
             child=child,
             theme=generation_request.theme,
-            chapter_number=generation_request.chapter_number
+            chapter_number=generation_request.chapter_number,
+            story_session=None,
+            custom_user_input=None
         )
         
         if not result["success"]:
@@ -227,7 +218,7 @@ async def generate_story(
         from app.models.story import Story, Choice, StoryBranch
         story = Story(
             title=generation_request.title or f"{generation_request.theme.capitalize()} Adventure",
-            content=story_content,
+            # content field removed - story content now in story_chapters table
             language=child.language_preference or "english",
             difficulty_level=child.reading_level or "beginner", 
             themes=[generation_request.theme],
@@ -244,6 +235,16 @@ async def generate_story(
         db.add(story)
         db.flush()  # Get the story ID
         
+        # Create StoryChapter record for the generated content
+        from app.models.story_chapter import StoryChapter
+        chapter = StoryChapter(
+            story_id=story.id,
+            chapter_number=generation_request.chapter_number,
+            content=story_content  # The actual story content
+        )
+        db.add(chapter)
+        db.flush()
+        
         # Create Choice records for the generated choices
         choices_with_ids = []
         for i, choice_data in enumerate(result.get("choices", [])):
@@ -259,14 +260,16 @@ async def generate_story(
             db.add(choice)
             db.flush()
             
-            # Add database ID to choice data for frontend
+            # Add database ID to choice data for frontend - use ONLY what LLM provided
             choice_with_id = {
                 "id": str(choice.id),  # Convert to string for frontend
-                "text": choice_data.get("text", "Continue"),
+                "text": choice_data.get("text", ""),  # No default fallback
                 "description": choice_data.get("description", ""),
-                "impact": choice_data.get("description", "See what happens next")
+                "impact": choice_data.get("description", "")  # No default fallback
             }
-            choices_with_ids.append(choice_with_id)
+            # Only add valid choices with actual text
+            if choice_with_id["text"]:
+                choices_with_ids.append(choice_with_id)
             
             # Create StoryBranch for this choice option
             # For now, create a simple continuation branch
@@ -422,9 +425,13 @@ async def check_story_safety(
                 detail="Story not found"
             )
         
-        # Run safety check
+        # Get all chapter content for safety check
+        chapters = story.chapters  # Get all chapters
+        combined_content = " ".join([chapter.content for chapter in chapters])
+        
+        # Run safety check on combined chapter content
         safety_result = story_service.check_story_safety(
-            story.content,
+            combined_content if combined_content else "",
             child_age,
             language
         )
@@ -571,31 +578,41 @@ async def make_story_choice(
             )
         
         # Process the choice
-        # Handle special "continue" choice for advancing chapters without explicit choices
-        if choice_request.choice_id == "continue":
-            result = session_service.advance_to_next_chapter(session_id)
-            if not result["success"]:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=result.get("error", "Failed to advance to next chapter")
-                )
-            logger.info(f"Advanced to next chapter in session: {session_id}")
-            return result
+        # Check if this is a custom user input choice
+        custom_user_input = None
+        if choice_request.choice_id == "custom-choice" and choice_request.custom_text:
+            custom_user_input = choice_request.custom_text.strip()
         
-        # Convert string choice_id to integer for database lookup
-        try:
-            choice_id = int(choice_request.choice_id)
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid choice ID format"
-            )
+        # Record the choice made (for context in next chapter generation)
+        session = session_service.get_session_by_id(session_id)
+        if session:
+            # Convert string choice_id to integer if possible, otherwise use special handling
+            try:
+                choice_id_int = int(choice_request.choice_id)
+                session.add_choice(choice_id_int, choice_request.option_index or 0)
+            except ValueError:
+                # Handle special choice IDs like "continue" or "custom-choice"
+                if not session.choices_made:
+                    session.choices_made = []
+                
+                choice_record = {
+                    "choice_id": choice_request.choice_id,  # Keep as string for special choices
+                    "option_index": choice_request.option_index or 0,
+                    "timestamp": choice_request.timestamp or datetime.utcnow().isoformat(),
+                }
+                
+                # For custom choices, record the user's text as the chosen option
+                if choice_request.choice_id == "custom-choice" and choice_request.custom_text:
+                    choice_record["chosen_option"] = choice_request.custom_text.strip()
+                    choice_record["question"] = "Custom user input"
+                
+                session.choices_made.append(choice_record)
             
-        result = session_service.make_story_choice(
-            session_id,
-            choice_id,
-            choice_request.option_index
-        )
+            # Commit the choice to database
+            session_service.db.commit()
+        
+        # Use dynamic chapter generation, passing custom input if provided
+        result = session_service.advance_to_next_chapter(session_id, custom_user_input)
         
         if not result["success"]:
             raise HTTPException(

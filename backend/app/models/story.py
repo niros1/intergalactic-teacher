@@ -16,10 +16,10 @@ class Story(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     
-    # Story content
+    # Story metadata
     title = Column(String, nullable=False)
     description = Column(Text)
-    content = Column(Text, nullable=False)  # Main story content
+    # content field removed - now using story_chapters table
     
     # Story metadata
     language = Column(

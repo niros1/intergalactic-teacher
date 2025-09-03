@@ -12,7 +12,7 @@ import LoginPage from './pages/auth/LoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import SetupPage from './pages/child/SetupPage'
 import DashboardPage from './pages/child/DashboardPage'
-import ReadingPage from './pages/reading/ReadingPage'
+import ChatReadingPage from './pages/reading/ChatReadingPage'
 
 // Layout Components
 import Layout from './components/layout/Layout'
@@ -70,10 +70,15 @@ function App() {
             <Navigate to="/auth/login" replace />
           )
         } />
+        {/* Redirect old reading route to chat interface */}
         <Route path="/reading" element={
+          <Navigate to="/chat-reading" replace />
+        } />
+        
+        <Route path="/chat-reading" element={
           isAuthenticated ? (
             <Layout>
-              <ReadingPage />
+              <ChatReadingPage />
             </Layout>
           ) : (
             <Navigate to="/auth/login" replace />

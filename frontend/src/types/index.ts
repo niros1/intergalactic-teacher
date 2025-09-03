@@ -47,6 +47,7 @@ export interface Story {
 
 export interface Choice {
   id: string
+  option_index: number
   text: string
   impact: string
   nextChapter?: number
@@ -252,7 +253,9 @@ export interface UpdateProgressRequest {
 
 export interface MakeChoiceRequest {
   choiceId: string
+  optionIndex: number
   timestamp: string
+  customText?: string // Added for free-form text input
 }
 
 export interface SessionResponse {

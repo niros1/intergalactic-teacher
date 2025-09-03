@@ -233,13 +233,14 @@ class StorySessionService:
                 
                 for choice in choices_query:
                     if choice.choices_data:
-                        for option in enumerate(choice.choices_data):
-                            if isinstance(option[1], dict) and 'text' in option[1]:
+                        for option_index, option_data in enumerate(choice.choices_data):
+                            if isinstance(option_data, dict) and 'text' in option_data:
                                 new_choices.append({
                                     'id': str(choice.id),
-                                    'text': option[1].get('text', ''),
-                                    'impact': option[1].get('impact', 'normal'),
-                                    'description': option[1].get('description', '')
+                                    'option_index': option_index,
+                                    'text': option_data.get('text', ''),
+                                    'impact': option_data.get('impact', 'normal'),
+                                    'description': option_data.get('description', '')
                                 })
             
             result = {
@@ -259,7 +260,7 @@ class StorySessionService:
             self.db.rollback()
             return {"success": False, "error": str(e)}
     
-    def advance_to_next_chapter(self, session_id: int) -> Dict:
+    def advance_to_next_chapter(self, session_id: int, custom_user_input: Optional[str] = None) -> Dict:
         """Advance to the next chapter without making a specific choice."""
         try:
             session = self.get_session_by_id(session_id)
@@ -294,7 +295,8 @@ class StorySessionService:
                 child=session.child,
                 theme=session.story.themes[0] if session.story.themes else "adventure",
                 chapter_number=next_chapter,
-                story_session=session
+                story_session=session,
+                custom_user_input=custom_user_input
             )
             
             if not generation_result["success"]:
@@ -328,13 +330,14 @@ class StorySessionService:
                 
                 for choice in choices_query:
                     if choice.choices_data:
-                        for option in enumerate(choice.choices_data):
-                            if isinstance(option[1], dict) and 'text' in option[1]:
+                        for option_index, option_data in enumerate(choice.choices_data):
+                            if isinstance(option_data, dict) and 'text' in option_data:
                                 new_choices.append({
                                     'id': str(choice.id),
-                                    'text': option[1].get('text', ''),
-                                    'impact': option[1].get('impact', 'normal'),
-                                    'description': option[1].get('description', '')
+                                    'option_index': option_index,
+                                    'text': option_data.get('text', ''),
+                                    'impact': option_data.get('impact', 'normal'),
+                                    'description': option_data.get('description', '')
                                 })
             
             # Update session

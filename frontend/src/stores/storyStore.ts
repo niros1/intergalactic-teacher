@@ -306,3 +306,57 @@ if (storedStory) {
     localStorage.removeItem('currentStory')
   }
 }
+
+// Debug helper: Expose store to window for console access
+if (typeof window !== 'undefined') {
+  ;(window as any).storyStore = useStoryStore
+  ;(window as any).debugStory = {
+    getCurrentStory: () => useStoryStore.getState().currentStory,
+    getAllStories: () => useStoryStore.getState().stories,
+    getFullState: () => useStoryStore.getState(),
+    inspectCurrentStoryContent: () => {
+      const story = useStoryStore.getState().currentStory
+      if (story) {
+        console.log('📚 Current Story Debug Info:')
+        console.log('- Title:', story.title)
+        console.log('- Current Chapter:', story.currentChapter)
+        console.log('- Total Chapters:', story.totalChapters)
+        console.log('- Content:', story.content)
+        console.log('- Choices:', story.choices)
+        console.log('- Is Completed:', story.isCompleted)
+        console.log('- Full Story Object:', story)
+        return story
+      } else {
+        console.log('No current story found')
+        return null
+      }
+    },
+    cleanCurrentStory: () => {
+      useStoryStore.getState().setCurrentStory(null)
+      localStorage.removeItem('currentStory')
+      console.log('✅ Current story cleared from store and localStorage')
+    },
+    cleanAllState: () => {
+      const { setCurrentStory, clearError } = useStoryStore.getState()
+      setCurrentStory(null)
+      clearError()
+      useStoryStore.setState({
+        stories: [],
+        isGenerating: false,
+        isLoading: false,
+        error: null
+      })
+      localStorage.removeItem('currentStory')
+      console.log('✅ All story state cleared (stories, current story, errors, loading states)')
+      console.log('⚠️  Note: This does not clear child store or session data')
+    }
+  }
+  console.log('🔍 Debug helpers available:')
+  console.log('- window.storyStore: Full Zustand store')
+  console.log('- window.debugStory.getCurrentStory(): Get current story')
+  console.log('- window.debugStory.getAllStories(): Get all stories')
+  console.log('- window.debugStory.getFullState(): Get full store state')
+  console.log('- window.debugStory.inspectCurrentStoryContent(): Detailed current story debug')
+  console.log('- window.debugStory.cleanCurrentStory(): Clear current story only')
+  console.log('- window.debugStory.cleanAllState(): Clear all story state')
+}

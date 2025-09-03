@@ -14,7 +14,13 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@assistant-ui/react": "^0.10.43",
+    "@radix-ui/react-slot": "^1.0.2",
+    "@radix-ui/react-tooltip": "^1.0.7",
     "axios": "^1.11.0",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.0.0",
+    "lucide-react": "^0.400.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-router-dom": "^7.8.2",

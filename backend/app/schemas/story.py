@@ -1,7 +1,7 @@
 """Story schemas for request/response validation."""
 
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, validator
 
@@ -46,7 +46,7 @@ class StoryCreate(BaseModel):
 class StoryResponse(StoryBase):
     """Schema for story response."""
     id: int
-    content: str
+    # content field removed - now using story_chapters
     target_age_min: int
     target_age_max: int
     estimated_reading_time: int
@@ -118,7 +118,7 @@ class StoryBranchResponse(BaseModel):
     choice_id: int
     choice_option_index: int
     branch_name: Optional[str]
-    content: str
+    content: str  # Note: This is branch content, not story content
     leads_to_chapter: Optional[int]
     leads_to_choice_id: Optional[int]
     is_ending: bool
@@ -154,6 +154,7 @@ class ChoiceSelectionRequest(BaseModel):
     choice_id: str = Field(alias="choiceId")
     timestamp: Optional[str] = None
     option_index: Optional[int] = Field(default=0, alias="optionIndex")
+    custom_text: Optional[str] = Field(default=None, alias="customText")
     
     class Config:
         populate_by_name = True

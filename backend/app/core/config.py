@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     
     # Security
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 3000
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     PASSWORD_MIN_LENGTH: int = 8
     
@@ -52,8 +52,8 @@ class Settings(BaseSettings):
     
     # Ollama Configuration
     OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "llama3.2:latest"
-    OLLAMA_MAX_TOKENS: int = 2000
+    OLLAMA_MODEL: str = "llama3.3:latest"
+    OLLAMA_MAX_TOKENS: int = 4000
     OLLAMA_TEMPERATURE: float = 0.7
     
     # Content Safety

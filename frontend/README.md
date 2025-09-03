@@ -113,3 +113,73 @@ The application supports Hebrew and English with:
 - Firefox 88+
 - Safari 14+
 - Edge 90+
+
+## Debug Utilities
+
+The application includes built-in debug utilities accessible through the browser console for development and troubleshooting.
+
+### Available Debug Functions
+
+Access these utilities by opening the browser console (F12) and using the `window.debugStory` object:
+
+#### State Inspection
+```javascript
+// Get current active story
+window.debugStory.getCurrentStory()
+
+// Get all stories in the store
+window.debugStory.getAllStories()
+
+// Get complete store state
+window.debugStory.getFullState()
+
+// Detailed inspection of current story with formatted output
+window.debugStory.inspectCurrentStoryContent()
+```
+
+#### State Management
+```javascript
+// Clear only the current story (preserves story list)
+window.debugStory.cleanCurrentStory()
+
+// Clear all story state (stories, current story, errors, loading states)
+window.debugStory.cleanAllState()
+```
+
+#### Direct Store Access
+```javascript
+// Direct access to Zustand store
+window.storyStore.getState()
+
+// Direct access to specific story content
+window.storyStore.getState().currentStory.content
+```
+
+### Usage Examples
+
+**Debugging Story Content Issues:**
+```javascript
+// Check what content is currently loaded
+window.debugStory.inspectCurrentStoryContent()
+
+// Clear current story if it's corrupted
+window.debugStory.cleanCurrentStory()
+```
+
+**Resetting State During Development:**
+```javascript
+// Reset everything to start fresh
+window.debugStory.cleanAllState()
+```
+
+**Monitoring State Changes:**
+```javascript
+// Check state after making a story choice
+window.debugStory.getCurrentStory()
+```
+
+### Notes
+- Debug utilities are only available in development builds
+- `cleanAllState()` does not clear child store or session data
+- All functions provide console feedback with emojis for easy identification
+- Use these utilities to troubleshoot story loading, state persistence, and content display issues

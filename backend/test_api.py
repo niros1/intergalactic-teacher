@@ -39,7 +39,7 @@ async def root():
     return {
         "message": "🚀 Intergalactic Teacher - Ollama Story Generation API",
         "status": "running",
-        "model": "llama3.2:latest"
+        "model": "llama3.3:latest"
     }
 
 @app.post("/generate-story", response_model=dict)
@@ -76,7 +76,7 @@ async def generate_story(request: StoryRequest):
             "success": True,
             "story": result,
             "metadata": {
-                "model": "llama3.2:latest",
+                "model": "llama3.3:latest",
                 "theme": request.theme,
                 "child_age": request.child_age,
                 "reading_level": request.reading_level
