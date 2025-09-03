@@ -1,12 +1,12 @@
 """LangGraph workflow for story generation with personalization and safety checks."""
 
 from typing import Any, Dict, List, Optional, TypedDict
-import json
 import logging
-import re
 import os
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.pydantic_v1 import BaseModel, Field
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_ollama import ChatOllama
 from langgraph.graph import END, StateGraph
 # Removed unused LangSmith imports - tracing is handled automatically
@@ -20,6 +20,27 @@ if os.getenv("LANGSMITH_TRACING", "").lower() == "true":
     logger.info("LangSmith tracing enabled for project: %s", os.getenv("LANGSMITH_PROJECT", "default"))
 else:
     logger.info("LangSmith tracing is not enabled")
+
+
+# Pydantic models for structured output
+class Choice(BaseModel):
+    """Model for story choices."""
+    text: str = Field(..., description="The choice text that the child will see")
+    description: str = Field("", description="Optional description providing more context about the choice")
+
+
+class StoryContent(BaseModel):
+    """Model for complete story generation output."""
+    story_content: str = Field(..., description="The main story content for this chapter, written in direct storytelling voice")
+    choices: List[Choice] = Field(..., description="List of 2-4 choices for the child to make to continue the story")
+    educational_elements: List[str] = Field(
+        default=["Reading comprehension", "Decision making"], 
+        description="Educational elements present in this chapter"
+    )
+    vocabulary_words: List[str] = Field(
+        default=[], 
+        description="List of challenging or educational vocabulary words used in this chapter"
+    )
 
 
 class StoryGenerationState(TypedDict):
@@ -64,67 +85,7 @@ def create_story_summary(chapter_content: str, chapter_num: int = 0) -> str:
     return summary[:400]  # Limit to 400 chars for consistency
 
 
-def fix_json_formatting(json_str: str) -> str:
-    """
-    Fix common JSON formatting issues caused by LLM responses,
-    particularly unescaped newlines inside string values.
-    """
-    try:
-        # First, try to parse as-is in case it's already valid
-        json.loads(json_str)
-        return json_str
-    except json.JSONDecodeError:
-        logger.info("JSON parsing failed, attempting to fix formatting...")
-    
-    # Use the regex-based approach which is more reliable for this specific issue
-    return fix_newlines_in_json_strings(json_str)
-
-
-def fix_newlines_in_json_strings(json_str: str) -> str:
-    """
-    Robust approach: Use regex to find and fix unescaped newlines in JSON string values.
-    This handles the most common case where LLM outputs story_content with literal newlines.
-    """
-    import re
-    
-    # First, try a simple approach: replace literal newlines within quotes with escaped newlines
-    # This pattern finds content between quotes that spans multiple lines
-    def fix_multiline_string(match):
-        content = match.group(1)
-        # Replace literal newlines with escaped ones, but preserve existing escaped ones
-        fixed_content = content.replace('\n', '\\n').replace('\r', '\\r')
-        # Fix any double-escaped newlines that might occur
-        fixed_content = fixed_content.replace('\\\\n', '\\n').replace('\\\\r', '\\r')
-        return f'"{fixed_content}"'
-    
-    # Pattern to match quoted strings that contain newlines
-    multiline_string_pattern = r'"([^"]*\n[^"]*)"'
-    fixed_json = re.sub(multiline_string_pattern, fix_multiline_string, json_str, flags=re.MULTILINE | re.DOTALL)
-    
-    # Handle the specific case of story_content field which is most likely to have this issue
-    story_content_pattern = r'("story_content"\s*:\s*")([^"]*(?:\n[^"]*)*?)(")'
-    
-    def fix_story_content(match):
-        prefix = match.group(1)
-        content = match.group(2) 
-        suffix = match.group(3)
-        
-        # Escape newlines and any unescaped quotes in the content
-        fixed_content = content.replace('\n', '\\n').replace('\r', '\\r')
-        # Handle any embedded quotes (basic approach)
-        fixed_content = re.sub(r'(?<!\\)"', '\\"', fixed_content)
-        
-        return f'{prefix}{fixed_content}{suffix}'
-    
-    # Apply story_content specific fix
-    fixed_json = re.sub(story_content_pattern, fix_story_content, fixed_json, flags=re.MULTILINE | re.DOTALL)
-    
-    # Clean up common JSON formatting issues
-    # Remove trailing commas
-    fixed_json = re.sub(r',\s*}', '}', fixed_json)
-    fixed_json = re.sub(r',\s*]', ']', fixed_json)
-    
-    return fixed_json
+# JSON formatting helper functions removed - no longer needed with structured output
 
 
 def create_story_prompt(state: StoryGenerationState) -> str:
@@ -235,9 +196,89 @@ def create_story_prompt(state: StoryGenerationState) -> str:
     return full_prompt
 
 
+def create_story_prompt_for_structured_output(state: StoryGenerationState) -> str:
+    """Create a personalized story generation prompt optimized for structured output."""
+    prefs = state["child_preferences"]
+    theme = state["story_theme"]
+    chapter_num = state["chapter_number"]
+    logger.info(f"Generating structured prompt for chapter {chapter_num} with {len(state['previous_chapters'])} previous chapters for context")
+    
+    # Base prompt structure - optimized for structured output
+    prompt_parts = [
+        f"Create Chapter {chapter_num} of a {theme} story for a {prefs.get('age', 9)}-year-old child.",
+        f"Write as if you are telling the story directly to the child in person.",
+        "",
+        "CHILD PROFILE:",
+        f"- Age: {prefs.get('age')} years old",
+        f"- Language: {prefs.get('language', 'english')}",
+        f"- Reading Level: {prefs.get('reading_level', 'beginner')}",
+        f"- Interests: {', '.join(prefs.get('interests', []))}",
+        f"- Vocabulary Level: {prefs.get('vocabulary_level', 50)}/100",
+        "",
+        "STORY REQUIREMENTS:",
+        "- Write 3-5 engaging paragraphs for story_content",
+        "- Start immediately with the story (no meta-commentary)",
+        "- Use vocabulary appropriate for the reading level with 2-3 challenging words",
+        "- Include diverse characters and positive values",
+        "- Provide 2-4 meaningful choices that advance the story",
+    ]
+    
+    # Add enhanced context from previous chapters
+    if state["previous_chapters"]:
+        prompt_parts.extend([
+            "",
+            "STORY CONTEXT - What happened before:",
+        ])
+        
+        # Add chapter summaries for context
+        for i, chapter in enumerate(state["previous_chapters"]):
+            summary = create_story_summary(chapter, i+1)
+            prompt_parts.append(f"Chapter {i+1}: {summary}")
+        
+        prompt_parts.extend([
+            "",
+            "CONTINUITY REQUIREMENTS:",
+            "- Reference and build upon characters, relationships, and events from previous chapters",
+            "- Maintain established tone, world-building, and character personalities",
+            "- Create natural story progression that acknowledges what came before",
+            f"- This is Chapter {chapter_num}, continue the established narrative"
+        ])
+    
+    # Add choice context
+    if state["previous_choices"]:
+        prompt_parts.extend([
+            "",
+            "PREVIOUS STORY DECISIONS:",
+        ])
+        
+        for choice in state["previous_choices"]:
+            prompt_parts.append(f"• {choice['question']}: '{choice['chosen_option']}'")
+        
+        prompt_parts.append("→ Honor these decisions and their consequences in the story.")
+    
+    # Add custom user input context
+    if state.get("custom_user_input"):
+        prompt_parts.extend([
+            "",
+            "CUSTOM USER INPUT:",
+            f"The child has expressed: \"{state['custom_user_input']}\"",
+            "Incorporate this naturally into the story progression and respond meaningfully.",
+        ])
+    
+    prompt_parts.extend([
+        "", 
+        "IMPORTANT: Ensure story_content flows naturally from previous chapters.",
+        "Reference characters, events, and settings established earlier.",
+        "The response will be automatically structured with the required fields.",
+    ])
+    
+    return "\n".join(prompt_parts)
+
+
 def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
-    """Generate story content using Ollama."""
+    """Generate story content using Ollama with structured output."""
     try:
+        # Initialize the base LLM
         llm = ChatOllama(
             model=settings.OLLAMA_MODEL,
             base_url=settings.OLLAMA_BASE_URL,
@@ -245,110 +286,41 @@ def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
             num_predict=settings.OLLAMA_MAX_TOKENS,
         )
         
-        # Create the prompt
-        prompt = create_story_prompt(state)
+        # Create structured LLM that auto-guides to JSON matching StoryContent schema
+        structured_llm = llm.with_structured_output(StoryContent)
         
-        # Generate content
-        messages = [
-            SystemMessage(content="You are an expert children's story writer creating educational, engaging, and safe content."),
-            HumanMessage(content=prompt)
-        ]
+        # Create the personalized prompt
+        prompt_text = create_story_prompt_for_structured_output(state)
         
-        response = llm.invoke(messages)
-        content = response.content.strip()
-        logger.info(f"LLM raw response: {content}")
+        # Create a structured prompt template
+        prompt_template = ChatPromptTemplate.from_messages([
+            ("system", "You are an expert children's story writer creating educational, engaging, and safe content. You must respond with the exact fields specified in the schema."),
+            ("user", "{prompt}")
+        ])
         
-        # Try to parse JSON response - DEBUG MODE: No fallbacks, raise errors
-        try:
-            # Extract JSON from various formats the model might return
-            json_content = content
-            
-            # Check if content has markdown code blocks
-            if "```json" in content:
-                start = content.find("```json") + 7
-                end = content.find("```", start)
-                if end > start:
-                    json_content = content[start:end].strip()
-                    logger.info(f"Extracted from ```json blocks: {json_content}")
-            elif "```" in content:
-                start = content.find("```") + 3
-                end = content.find("```", start)
-                if end > start:
-                    json_content = content[start:end].strip()
-                    logger.info(f"Extracted from ``` blocks: {json_content}")
-            
-            # Try to find JSON object in the content
-            if "{" in json_content:
-                start = json_content.find("{")
-                end = json_content.rfind("}") + 1
-                if end > start:
-                    json_content = json_content[start:end]
-                    logger.info(f"Extracted JSON object: {json_content}")
-            
-            logger.info(f"Final JSON content to parse: {json_content}")
-            
-            # Pre-process JSON content to fix unescaped newlines and other JSON issues
-            json_content = fix_json_formatting(json_content)
-            logger.info(f"JSON content after fixing: {json_content}")
-            
-            story_data = json.loads(json_content)
-            
-            # Extract the actual story content and choices
-            story_text = story_data.get("story_content", "")
-            # Clean up any escape characters, formatting, and prefixes
-            story_text = story_text.replace('\\n', '\n').replace('\\"', '"').strip()
-            
-            # Remove prefixes even from successful JSON parsing
-            story_text = re.sub(r'Here is Chapter \d+ of.*?:', '', story_text)
-            story_text = re.sub(r'Chapter \d+:', '', story_text)
-            story_text = re.sub(r'story_content:\s*`', '', story_text)
-            story_text = re.sub(r'^story_content:', '', story_text)
-            story_text = story_text.replace('Here is the story:', '')
-            story_text = story_text.replace('Here\'s the story:', '')
-            story_text = story_text.strip()
-            choices = story_data.get("choices", [])
-            
-            # Ensure choices is a proper list
-            if not isinstance(choices, list):
-                choices = []
-            
-            # Validate choice structure - handle both object and string formats
-            valid_choices = []
-            for choice in choices:
-                if isinstance(choice, dict) and "text" in choice:
-                    # LLM returned proper object format
-                    valid_choices.append({
-                        "text": choice.get("text", ""),
-                        "description": choice.get("description", "")
-                    })
-                elif isinstance(choice, str) and choice.strip():
-                    # LLM returned string format - convert to object
-                    valid_choices.append({
-                        "text": choice.strip(),
-                        "description": ""  # No description available
-                    })
-            
-            if not valid_choices:
-                # If LLM doesn't provide valid choices, raise an error
-                logger.error("LLM didn't provide valid choices in the response")
-                raise ValueError("No valid choices provided in LLM response")
-            
-            return {
-                "story_content": story_text,
-                "choices": valid_choices,
-                "educational_elements": story_data.get("educational_elements", ["Reading comprehension", "Decision making"]),
-                "vocabulary_words": story_data.get("vocabulary_words", []),
-            }
-            
-        except (json.JSONDecodeError, Exception) as e:
-            logger.error(f"JSON parsing failed! Raw content: {content}")
-            logger.error(f"Attempted to parse: {json_content}")
-            logger.error(f"JSON error: {str(e)}")
-            # DEBUG MODE: Raise the error instead of using fallbacks
-            raise ValueError(f"LLM returned invalid JSON. Raw response: {content[:500]}... Error: {str(e)}")
-            
+        # Create the chain: prompt -> structured_llm
+        chain = prompt_template | structured_llm
+        
+        # Invoke the chain to get structured output
+        logger.info("Generating story content with structured output...")
+        result: StoryContent = chain.invoke({"prompt": prompt_text})
+        
+        logger.info(f"Generated structured story content successfully")
+        logger.info(f"Story content length: {len(result.story_content)} characters")
+        logger.info(f"Number of choices: {len(result.choices)}")
+        
+        # Convert to dictionary format expected by the workflow
+        return {
+            "story_content": result.story_content,
+            "choices": [choice.dict() for choice in result.choices],
+            "educational_elements": result.educational_elements,
+            "vocabulary_words": result.vocabulary_words,
+        }
+        
     except Exception as e:
-        logger.error(f"Error generating story content: {e}")
+        logger.error(f"Error generating story content with structured output: {e}")
+        # Log the full error for debugging
+        logger.error(f"Full error details: {str(e)}")
         raise
 
 
