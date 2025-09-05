@@ -43,7 +43,7 @@ const ChatReadingPage: React.FC = () => {
   // Check if we have the necessary data
   if (!currentStory || !currentChild) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="page-container flex items-center justify-center">
         <div className="text-center">
           <h1 className="heading-child">
             {currentChild?.language_preference === 'hebrew' ? 'טוען סיפור...' : 'Loading story...'}
@@ -182,20 +182,20 @@ const ChatReadingPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden" style={{
+    <div className="page-container relative" style={{
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #f5576c 100%)'
     }}>
       {/* Floating decorative elements */}
-      <div className="fixed inset-0 pointer-events-none z-0">
+      <div className="absolute inset-0 pointer-events-none z-0">
         <div className="absolute top-10 left-10 w-8 h-8 text-yellow-400 animate-bounce" style={{ animationDelay: '0s' }}>⭐</div>
         <div className="absolute top-32 right-16 w-6 h-6 text-pink-400 animate-bounce" style={{ animationDelay: '1s' }}>🌟</div>
         <div className="absolute bottom-32 left-20 w-7 h-7 text-blue-400 animate-bounce" style={{ animationDelay: '2s' }}>✨</div>
         <div className="absolute bottom-20 right-32 w-6 h-6 text-purple-400 animate-bounce" style={{ animationDelay: '1.5s' }}>🎈</div>
       </div>
 
-      <div className="max-w-4xl mx-auto p-2 sm:p-4 relative z-10">
+      <div className="max-w-4xl mx-auto h-full flex flex-col p-2 sm:p-4 relative z-10">
         {/* Enhanced Header */}
-        <div className="flex flex-col sm:flex-row items-center justify-between mb-4 sm:mb-6 bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl p-4 sm:p-6 border-2 border-white/50">
+        <div className="flex-shrink-0 flex flex-col sm:flex-row items-center justify-between mb-2 sm:mb-4 bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl p-3 sm:p-4 border-2 border-white/50">
           <button
             onClick={() => navigate('/child/dashboard')}
             className="btn-secondary text-sm sm:text-base mb-3 sm:mb-0 order-2 sm:order-1"
@@ -241,12 +241,10 @@ const ChatReadingPage: React.FC = () => {
         </div>
 
         {/* Chat Interface */}
-        <div className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl overflow-hidden border-2 border-white/50" 
-             style={{ height: 'calc(100vh - 200px)', minHeight: '400px' }}>
+        <div className="flex-1 bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl border-2 border-white/50 flex flex-col overflow-hidden min-h-0">
           
           {/* Messages Area */}
-          <div className="h-full flex flex-col">
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {runtime.messages && runtime.messages.map((message: any) => (
                 <div
                   key={message.id}
@@ -323,8 +321,8 @@ const ChatReadingPage: React.FC = () => {
               )}
             </div>
 
-            {/* Input Area */}
-            <div className="border-t border-gray-200 p-4 bg-white/80 backdrop-blur-sm">
+          {/* Input Area */}
+          <div className="flex-shrink-0 border-t border-gray-200 p-4 bg-white/80 backdrop-blur-sm">
               {/* Speech Recognition Error */}
               {error && (
                 <div className="mb-3 p-3 bg-red-100 border border-red-300 rounded-xl text-red-700 text-sm text-center">

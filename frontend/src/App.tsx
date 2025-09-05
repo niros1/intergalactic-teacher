@@ -73,9 +73,7 @@ function App() {
         } />
         <Route path="/child/dashboard" element={
           isAuthenticated ? (
-            <Layout>
-              <DashboardPage />
-            </Layout>
+            <DashboardPage />
           ) : (
             <Navigate to="/auth/login" replace />
           )
@@ -87,9 +85,7 @@ function App() {
         
         <Route path="/chat-reading" element={
           isAuthenticated ? (
-            <Layout>
-              <ChatReadingPage />
-            </Layout>
+            <ChatReadingPage />
           ) : (
             <Navigate to="/auth/login" replace />
           )

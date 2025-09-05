@@ -8,16 +8,22 @@
     font-family: 'Comic Sans MS', cursive, system-ui, sans-serif;
     font-size: 18px;
     line-height: 1.6;
+    height: 100%;
+    overflow-x: hidden;
   }
 
   body {
     margin: 0;
     padding: 0;
+    height: 100vh;
     min-height: 100vh;
+    /* Use dvh for better mobile support when available */
+    min-height: 100dvh;
     background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 25%, #fecfef 75%, #ffd1dc 100%);
-    background-attachment: fixed;
+    background-attachment: scroll; /* Changed from fixed to scroll for mobile compatibility */
     color: #2d3748;
     position: relative;
+    overflow-x: hidden;
   }
 
   /* Animated background elements */
@@ -44,6 +50,36 @@
   /* Smooth scrolling for better UX */
   * {
     scroll-behavior: smooth;
+  }
+
+  /* Viewport management utilities */
+  .viewport-container {
+    height: 100vh;
+    /* Use dvh for better mobile support when available */
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .viewport-content {
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .page-container {
+    min-height: 100vh;
+    min-height: 100dvh;
+    max-height: 100vh;
+    max-height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .scrollable-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 }
 
