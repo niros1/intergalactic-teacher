@@ -17,10 +17,16 @@ const EditChildPage: React.FC = () => {
   // Initialize form with current child data
   useEffect(() => {
     if (currentChild) {
+      // Handle both old and new field names for backward compatibility
+      const language = currentChild.language_preference || (currentChild as any).language || 'english'
+      
+      console.log('EditChildPage - currentChild:', currentChild)
+      console.log('EditChildPage - language value:', language)
+      
       setFormData({
         name: currentChild.name,
         age: currentChild.age,
-        language: currentChild.language,
+        language: language as Language,
         interests: currentChild.interests || [],
       })
     } else {

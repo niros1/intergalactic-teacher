@@ -6,12 +6,22 @@ import { type Theme } from '../../types'
 
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate()
-  const { currentChild } = useChildStore()
+  const { currentChild, loadChildren, isLoading: childLoading } = useChildStore()
   const { generateStory, currentStory, stories, isGenerating, loadStories } = useStoryStore()
 
-  // Load existing stories when component mounts
+  // Load children and stories when component mounts
+  useEffect(() => {
+    // If no current child, load children first
+    if (!currentChild) {
+      console.log('No current child found, loading children...')
+      loadChildren()
+    }
+  }, [currentChild, loadChildren])
+
+  // Load existing stories when we have a current child
   useEffect(() => {
     if (currentChild && loadStories) {
+      console.log(`Loading stories for child ID: ${currentChild.id}`)
       // Load stories for this specific child
       loadStories({ childId: currentChild.id.toString() })
     }
@@ -63,8 +73,8 @@ const DashboardPage: React.FC = () => {
       await generateStory({
         childId: currentChild.id,
         theme,
-        language: currentChild.language,
-        readingLevel: currentChild.readingLevel,
+        language: currentChild.language_preference as any, // Use correct field name
+        readingLevel: currentChild.reading_level as any, // Use correct field name
       })
       navigate('/chat-reading')
     } catch (error) {
@@ -83,7 +93,12 @@ const DashboardPage: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <h1 className="heading-child">Welcome!</h1>
-          <p className="text-child">Setting up your reading adventure...</p>
+          <p className="text-child">
+            {childLoading ? 'Loading your profile...' : 'Setting up your reading adventure...'}
+          </p>
+          {childLoading && (
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto mt-4"></div>
+          )}
         </div>
       </div>
     )
