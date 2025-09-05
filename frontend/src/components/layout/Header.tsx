@@ -85,7 +85,7 @@ const Header: React.FC = () => {
                 
                 <button
                   onClick={() => {
-                    navigate('/child/setup')
+                    navigate('/child/edit')
                     setShowUserMenu(false)
                   }}
                   className="w-full text-left px-4 py-2 text-child text-gray-700 hover:bg-primary-50 transition-colors"

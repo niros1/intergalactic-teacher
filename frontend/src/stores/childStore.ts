@@ -58,12 +58,13 @@ export const useChildStore = create<ChildStore>((set) => ({
     set({ isLoading: true, error: null })
     try {
       const updatedChild = await childService.updateChild(childId, updates)
+      const childIdNum = parseInt(childId)
       
       set(state => ({
         children: state.children.map(child =>
-          child.id === childId ? updatedChild : child
+          child.id === childIdNum ? updatedChild : child
         ),
-        currentChild: state.currentChild?.id === childId
+        currentChild: state.currentChild?.id === childIdNum
           ? updatedChild
           : state.currentChild,
         isLoading: false
@@ -71,7 +72,7 @@ export const useChildStore = create<ChildStore>((set) => ({
       
       // Update localStorage if this is the current child
       const state = useChildStore.getState()
-      if (state.currentChild?.id === childId) {
+      if (state.currentChild?.id === childIdNum) {
         localStorage.setItem('currentChild', JSON.stringify(updatedChild))
       }
       
@@ -91,6 +92,14 @@ export const useChildStore = create<ChildStore>((set) => ({
     try {
       const children = await childService.getChildren()
       
+      const state = useChildStore.getState()
+      
+      // If no current child is set and we have children, set the first one
+      if (!state.currentChild && children.length > 0) {
+        console.log('No current child set, setting first available child:', children[0])
+        useChildStore.getState().setCurrentChild(children[0])
+      }
+      
       set({
         children,
         isLoading: false
@@ -109,10 +118,11 @@ export const useChildStore = create<ChildStore>((set) => ({
     set({ isLoading: true, error: null })
     try {
       await childService.deleteChild(childId)
+      const childIdNum = parseInt(childId)
       
       set(state => {
-        const newChildren = state.children.filter(child => child.id !== childId)
-        const newCurrentChild = state.currentChild?.id === childId ? null : state.currentChild
+        const newChildren = state.children.filter(child => child.id !== childIdNum)
+        const newCurrentChild = state.currentChild?.id === childIdNum ? null : state.currentChild
         
         if (newCurrentChild === null) {
           localStorage.removeItem('currentChild')
@@ -170,16 +180,17 @@ export const useChildStore = create<ChildStore>((set) => ({
     set({ isLoading: true, error: null })
     try {
       const result = await childService.conductReadingAssessment(childId, assessment)
+      const childIdNum = parseInt(childId)
       
       // Update child's reading level if assessment provides it
       if (result.readingLevel) {
         set(state => ({
           children: state.children.map(child =>
-            child.id === childId
+            child.id === childIdNum
               ? { ...child, readingLevel: result.readingLevel }
               : child
           ),
-          currentChild: state.currentChild?.id === childId
+          currentChild: state.currentChild?.id === childIdNum
             ? { ...state.currentChild, readingLevel: result.readingLevel }
             : state.currentChild,
           isLoading: false
@@ -187,7 +198,7 @@ export const useChildStore = create<ChildStore>((set) => ({
         
         // Update localStorage if this is the current child
         const state = useChildStore.getState()
-        if (state.currentChild?.id === childId) {
+        if (state.currentChild?.id === childIdNum) {
           const updatedChild = { ...state.currentChild, readingLevel: result.readingLevel }
           localStorage.setItem('currentChild', JSON.stringify(updatedChild))
         }
@@ -210,15 +221,16 @@ export const useChildStore = create<ChildStore>((set) => ({
     set({ isLoading: true, error: null })
     try {
       const pictureUrl = await childService.uploadProfilePicture(childId, file)
+      const childIdNum = parseInt(childId)
       
       // Update child's profile picture
       set(state => ({
         children: state.children.map(child =>
-          child.id === childId
+          child.id === childIdNum
             ? { ...child, profilePicture: pictureUrl }
             : child
         ),
-        currentChild: state.currentChild?.id === childId
+        currentChild: state.currentChild?.id === childIdNum
           ? { ...state.currentChild, profilePicture: pictureUrl }
           : state.currentChild,
         isLoading: false
@@ -226,7 +238,7 @@ export const useChildStore = create<ChildStore>((set) => ({
       
       // Update localStorage if this is the current child
       const state = useChildStore.getState()
-      if (state.currentChild?.id === childId) {
+      if (state.currentChild?.id === childIdNum) {
         const updatedChild = { ...state.currentChild, profilePicture: pictureUrl }
         localStorage.setItem('currentChild', JSON.stringify(updatedChild))
       }
@@ -256,7 +268,16 @@ if (storedChild) {
     if (!child.interests || !Array.isArray(child.interests)) {
       child.interests = []
     }
-    useChildStore.getState().setCurrentChild(child)
+    
+    // Check if this child ID still exists (basic validation)
+    // If the child ID is one of the deleted ones (1, 3, 4, 5), clear localStorage
+    if ([1, 3, 4, 5].includes(child.id)) {
+      console.log(`Child ID ${child.id} was deleted, clearing localStorage`)
+      localStorage.removeItem('currentChild')
+      useChildStore.getState().setCurrentChild(null)
+    } else {
+      useChildStore.getState().setCurrentChild(child)
+    }
   } catch (error) {
     localStorage.removeItem('currentChild')
   }
