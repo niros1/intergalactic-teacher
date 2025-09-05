@@ -7,7 +7,7 @@ import { type Theme } from '../../types'
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate()
   const { currentChild, loadChildren, isLoading: childLoading } = useChildStore()
-  const { generateStory, currentStory, stories, isGenerating, loadStories } = useStoryStore()
+  const { generateStory, stories, isGenerating, loadStories } = useStoryStore()
 
   // Load children and stories when component mounts
   useEffect(() => {
@@ -71,10 +71,10 @@ const DashboardPage: React.FC = () => {
 
     try {
       await generateStory({
-        childId: currentChild.id,
+        childId: currentChild.id.toString(),
         theme,
-        language: currentChild.language_preference as any, // Use correct field name
-        readingLevel: currentChild.reading_level as any, // Use correct field name
+        language: currentChild.language_preference as any,
+        readingLevel: currentChild.reading_level as any,
       })
       navigate('/chat-reading')
     } catch (error) {
@@ -82,11 +82,6 @@ const DashboardPage: React.FC = () => {
     }
   }
 
-  const handleContinueStory = () => {
-    if (currentStory) {
-      navigate('/chat-reading')
-    }
-  }
 
   if (!currentChild) {
     return (
@@ -110,12 +105,12 @@ const DashboardPage: React.FC = () => {
         {/* Welcome Header */}
         <div className="text-center mb-8">
           <h1 className="heading-child">
-            {currentChild.language === 'hebrew' 
+            {currentChild.language_preference === 'hebrew' 
               ? `שלום ${currentChild.name}!` 
               : `Welcome back, ${currentChild.name}!`}
           </h1>
           <p className="text-child text-gray-600">
-            {currentChild.language === 'hebrew' 
+            {currentChild.language_preference === 'hebrew' 
               ? 'מוכן להתחיל הרפתקה חדשה?' 
               : 'Ready for a new reading adventure?'}
           </p>
@@ -125,7 +120,7 @@ const DashboardPage: React.FC = () => {
         {stories && stories.filter(story => !story.isCompleted).length > 0 && (
           <div className="mb-8">
             <h2 className="text-child-lg font-bold text-gray-800 mb-6">
-              {currentChild.language === 'hebrew' ? 'המשך לקרוא' : 'Continue Reading'}
+              {currentChild.language_preference === 'hebrew' ? 'המשך לקרוא' : 'Continue Reading'}
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {stories.filter(story => !story.isCompleted).map(story => (
@@ -134,7 +129,7 @@ const DashboardPage: React.FC = () => {
                     {story.title}
                   </h3>
                   <p className="text-sm text-gray-500 mb-3">
-                    {currentChild.language === 'hebrew' 
+                    {currentChild.language_preference === 'hebrew' 
                       ? `פרק ${story.currentChapter} מתוך ${story.totalChapters}` 
                       : `Chapter ${story.currentChapter} of ${story.totalChapters}`}
                   </p>
@@ -146,7 +141,7 @@ const DashboardPage: React.FC = () => {
                       navigate('/chat-reading')
                     }}
                   >
-                    💬 {currentChild.language === 'hebrew' ? 'המשך' : 'Continue'}
+                    💬 {currentChild.language_preference === 'hebrew' ? 'המשך' : 'Continue'}
                   </button>
                 </div>
               ))}
@@ -157,7 +152,7 @@ const DashboardPage: React.FC = () => {
         {/* Story Themes */}
         <div className="mb-8">
           <h2 className="text-child-lg font-bold text-gray-800 mb-6">
-            {currentChild.language === 'hebrew' 
+            {currentChild.language_preference === 'hebrew' 
               ? 'בחר סיפור חדש' 
               : 'Choose a New Story'}
           </h2>
@@ -188,7 +183,7 @@ const DashboardPage: React.FC = () => {
         {stories && stories.filter(story => story.isCompleted).length > 0 && (
           <div>
             <h2 className="text-child-lg font-bold text-gray-800 mb-6">
-              {currentChild.language === 'hebrew' 
+              {currentChild.language_preference === 'hebrew' 
                 ? 'סיפורים שהושלמו' 
                 : 'Completed Stories'}
             </h2>
@@ -199,7 +194,7 @@ const DashboardPage: React.FC = () => {
                     {story.title}
                   </h3>
                   <p className="text-sm text-gray-500 mb-3">
-                    {currentChild.language === 'hebrew' ? 'הושלם' : 'Completed'}
+                    {currentChild.language_preference === 'hebrew' ? 'הושלם' : 'Completed'}
                   </p>
                   <button 
                     className="btn-secondary text-sm w-full flex items-center justify-center gap-2"
@@ -209,7 +204,7 @@ const DashboardPage: React.FC = () => {
                       navigate('/chat-reading')
                     }}
                   >
-                    💬 {currentChild.language === 'hebrew' ? 'קרא שוב' : 'Read Again'}
+                    💬 {currentChild.language_preference === 'hebrew' ? 'קרא שוב' : 'Read Again'}
                   </button>
                 </div>
               ))}
@@ -223,12 +218,12 @@ const DashboardPage: React.FC = () => {
             <div className="card-child text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4"></div>
               <h3 className="text-child-base font-bold mb-2">
-                {currentChild.language === 'hebrew' 
+                {currentChild.language_preference === 'hebrew' 
                   ? 'יוצר סיפור מיוחד עבורך...' 
                   : 'Creating a special story for you...'}
               </h3>
               <p className="text-child-sm text-gray-600">
-                {currentChild.language === 'hebrew' 
+                {currentChild.language_preference === 'hebrew' 
                   ? 'זה ייקח כמה שניות' 
                   : 'This will take a few seconds'}
               </p>
