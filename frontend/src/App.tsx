@@ -11,6 +11,7 @@ import { ErrorBoundary } from './components/error'
 import LoginPage from './pages/auth/LoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import SetupPage from './pages/child/SetupPage'
+import EditChildPage from './pages/child/EditChildPage'
 import DashboardPage from './pages/child/DashboardPage'
 import ChatReadingPage from './pages/reading/ChatReadingPage'
 
@@ -56,6 +57,15 @@ function App() {
           isAuthenticated ? (
             <Layout>
               <SetupPage />
+            </Layout>
+          ) : (
+            <Navigate to="/auth/login" replace />
+          )
+        } />
+        <Route path="/child/edit" element={
+          isAuthenticated ? (
+            <Layout>
+              <EditChildPage />
             </Layout>
           ) : (
             <Navigate to="/auth/login" replace />
