@@ -43,17 +43,19 @@ const ChatReadingPage: React.FC = () => {
   // Check if we have the necessary data
   if (!currentStory || !currentChild) {
     return (
-      <div className="page-container flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="heading-child">
-            {currentChild?.language_preference === 'hebrew' ? 'טוען סיפור...' : 'Loading story...'}
-          </h1>
-          <button
-            onClick={() => navigate('/child/dashboard')}
-            className="btn-secondary mt-4"
-          >
-            {currentChild?.language_preference === 'hebrew' ? '← חזור' : '← Back'}
-          </button>
+      <div className="viewport-container">
+        <div className="viewport-content flex items-center justify-center">
+          <div className="text-center">
+            <h1 className="heading-child">
+              {currentChild?.language_preference === 'hebrew' ? 'טוען סיפור...' : 'Loading story...'}
+            </h1>
+            <button
+              onClick={() => navigate('/child/dashboard')}
+              className="btn-secondary mt-4"
+            >
+              {currentChild?.language_preference === 'hebrew' ? '← חזור' : '← Back'}
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -182,7 +184,7 @@ const ChatReadingPage: React.FC = () => {
   };
 
   return (
-    <div className="page-container relative" style={{
+    <div className="viewport-container relative" style={{
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #f5576c 100%)'
     }}>
       {/* Floating decorative elements */}
@@ -193,7 +195,7 @@ const ChatReadingPage: React.FC = () => {
         <div className="absolute bottom-20 right-32 w-6 h-6 text-purple-400 animate-bounce" style={{ animationDelay: '1.5s' }}>🎈</div>
       </div>
 
-      <div className="max-w-4xl mx-auto h-full flex flex-col p-2 sm:p-4 relative z-10">
+      <div className="viewport-content max-w-4xl mx-auto flex flex-col p-2 sm:p-4 relative z-10">
         {/* Enhanced Header */}
         <div className="flex-shrink-0 flex flex-col sm:flex-row items-center justify-between mb-2 sm:mb-4 bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl p-3 sm:p-4 border-2 border-white/50">
           <button
@@ -241,10 +243,10 @@ const ChatReadingPage: React.FC = () => {
         </div>
 
         {/* Chat Interface */}
-        <div className="flex-1 bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl border-2 border-white/50 flex flex-col overflow-hidden min-h-0">
+        <div className="flex-1 min-h-0 bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl border-2 border-white/50 flex flex-col overflow-hidden">
           
           {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
               {runtime.messages && runtime.messages.map((message: any) => (
                 <div
                   key={message.id}
@@ -408,7 +410,7 @@ const ChatReadingPage: React.FC = () => {
         </div>
 
         {/* Story info footer */}
-        <div className="mt-4 text-center">
+        <div className="flex-shrink-0 mt-4 text-center">
           <div className="inline-flex flex-wrap items-center justify-center gap-2 sm:gap-4 text-xs sm:text-sm bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl px-4 py-3 border-2 border-white/50">
             <div className="flex items-center space-x-1">
               <span className="text-base">🎯</span>
@@ -431,7 +433,6 @@ const ChatReadingPage: React.FC = () => {
           </div>
         </div>
       </div>
-    </div>
   );
 };
 

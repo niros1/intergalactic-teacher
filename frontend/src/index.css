@@ -9,21 +9,27 @@
     font-size: 18px;
     line-height: 1.6;
     height: 100%;
-    overflow-x: hidden;
+    height: 100dvh; /* Dynamic viewport height */
+    overflow: hidden; /* Prevent html scroll */
+    /* Prevent mobile browser zoom on input focus */
+    -webkit-text-size-adjust: 100%;
+    -ms-text-size-adjust: 100%;
   }
 
   body {
     margin: 0;
     padding: 0;
     height: 100vh;
+    height: 100dvh; /* Dynamic viewport height */
     min-height: 100vh;
-    /* Use dvh for better mobile support when available */
     min-height: 100dvh;
+    max-height: 100vh;
+    max-height: 100dvh;
     background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 25%, #fecfef 75%, #ffd1dc 100%);
-    background-attachment: scroll; /* Changed from fixed to scroll for mobile compatibility */
+    background-attachment: scroll; /* Better mobile compatibility */
     color: #2d3748;
     position: relative;
-    overflow-x: hidden;
+    overflow: hidden; /* Prevent body scroll */
   }
 
   /* Animated background elements */
@@ -52,23 +58,10 @@
     scroll-behavior: smooth;
   }
 
-  /* Viewport management utilities */
+  /* Enhanced viewport management utilities */
   .viewport-container {
     height: 100vh;
-    /* Use dvh for better mobile support when available */
-    height: 100dvh;
-    overflow: hidden;
-  }
-
-  .viewport-content {
-    height: 100%;
-    overflow-y: auto;
-    overflow-x: hidden;
-  }
-
-  .page-container {
-    min-height: 100vh;
-    min-height: 100dvh;
+    height: 100dvh; /* Dynamic viewport height for better mobile support */
     max-height: 100vh;
     max-height: 100dvh;
     overflow: hidden;
@@ -76,10 +69,107 @@
     flex-direction: column;
   }
 
-  .scrollable-content {
+  .viewport-content {
     flex: 1;
+    min-height: 0; /* Critical for proper flexbox behavior */
     overflow-y: auto;
     overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Legacy page-container for backwards compatibility */
+  .page-container {
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100vh;
+    max-height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Legacy scrollable-content for backwards compatibility */
+  .scrollable-content {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  /* Responsive grid improvements */
+  @media (max-width: 640px) {
+    .viewport-container {
+      height: 100vh; /* Fallback for older mobile browsers */
+      height: 100dvh;
+    }
+  }
+
+  /* Ensure content doesn't exceed viewport on small screens */
+  @media (max-height: 600px) {
+    .heading-child {
+      font-size: 2rem;
+      margin-bottom: 1rem;
+    }
+    
+    .text-child {
+      font-size: 1rem;
+    }
+    
+    .card-child {
+      padding: 1rem;
+    }
+  }
+
+  /* Grid system improvements for better viewport utilization */
+  .responsive-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  }
+
+  @media (min-width: 640px) {
+    .responsive-grid {
+      gap: 1.5rem;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .responsive-grid {
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .responsive-grid {
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    }
+  }
+
+  /* Ensure no element can cause horizontal overflow */
+  * {
+    box-sizing: border-box;
+    max-width: 100%;
+  }
+
+  /* Improve scrollbar styling for webkit browsers */
+  .viewport-content::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .viewport-content::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+  }
+
+  .viewport-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+  }
+
+  .viewport-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
   }
 }
 

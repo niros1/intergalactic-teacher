@@ -94,25 +94,28 @@ const DashboardPage: React.FC = () => {
 
   if (!currentChild) {
     return (
-      <div className="page-container flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="heading-child">Welcome!</h1>
-          <p className="text-child">
-            {childLoading ? 'Loading your profile...' : 'Setting up your reading adventure...'}
-          </p>
-          {childLoading && (
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto mt-4"></div>
-          )}
+      <div className="viewport-container">
+        <div className="viewport-content flex items-center justify-center">
+          <div className="text-center">
+            <h1 className="heading-child">Welcome!</h1>
+            <p className="text-child">
+              {childLoading ? 'Loading your profile...' : 'Setting up your reading adventure...'}
+            </p>
+            {childLoading && (
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto mt-4"></div>
+            )}
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="page-container">
-      {/* Minimal Top Header */}
-      <div className="flex-shrink-0 bg-white/90 backdrop-blur-sm border-b border-purple-100 p-4">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
+    <div className="viewport-container">
+      <div className="viewport-content">
+        {/* Minimal Top Header */}
+        <div className="flex-shrink-0 bg-white/90 backdrop-blur-sm border-b border-purple-100 p-4">
+          <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <span className="text-3xl">📚</span>
             <h1 className="text-xl font-bold text-purple-700">Interactive Reading</h1>
@@ -160,32 +163,32 @@ const DashboardPage: React.FC = () => {
               </div>
             )}
           </div>
-        </div>
-      </div>
-
-      <div className="flex-1 scrollable-content p-6">
-        <div className="max-w-6xl mx-auto">
-          {/* Welcome Header */}
-          <div className="text-center mb-8">
-            <h1 className="heading-child">
-              {currentChild.language_preference === 'hebrew' 
-                ? `שלום ${currentChild.name}!` 
-                : `Welcome back, ${currentChild.name}!`}
-            </h1>
-            <p className="text-child text-gray-600">
-              {currentChild.language_preference === 'hebrew' 
-                ? 'מוכן להתחיל הרפתקה חדשה?' 
-                : 'Ready for a new reading adventure?'}
-            </p>
           </div>
+        </div>
 
-        {/* Continue Reading Stories */}
-        {stories && stories.filter(story => !story.isCompleted).length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-child-lg font-bold text-gray-800 mb-6">
-              {currentChild.language_preference === 'hebrew' ? 'המשך לקרוא' : 'Continue Reading'}
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+        <div className="flex-1 min-h-0 p-6">
+          <div className="max-w-6xl mx-auto h-full">
+            {/* Welcome Header */}
+            <div className="text-center mb-8">
+              <h1 className="heading-child">
+                {currentChild.language_preference === 'hebrew' 
+                  ? `שלום ${currentChild.name}!` 
+                  : `Welcome back, ${currentChild.name}!`}
+              </h1>
+              <p className="text-child text-gray-600">
+                {currentChild.language_preference === 'hebrew' 
+                  ? 'מוכן להתחיל הרפתקה חדשה?' 
+                  : 'Ready for a new reading adventure?'}
+              </p>
+            </div>
+
+          {/* Continue Reading Stories */}
+          {stories && stories.filter(story => !story.isCompleted).length > 0 && (
+            <div className="mb-8">
+              <h2 className="text-child-lg font-bold text-gray-800 mb-6">
+                {currentChild.language_preference === 'hebrew' ? 'המשך לקרוא' : 'Continue Reading'}
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-6">
               {stories.filter(story => !story.isCompleted).map(story => (
                 <div key={story.id} className="card-child">
                   <h3 className="text-child-base font-bold text-gray-800 mb-2">
@@ -207,19 +210,19 @@ const DashboardPage: React.FC = () => {
                     💬 {currentChild.language_preference === 'hebrew' ? 'המשך' : 'Continue'}
                   </button>
                 </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Story Themes */}
-        <div className="mb-8">
-          <h2 className="text-child-lg font-bold text-gray-800 mb-6">
-            {currentChild.language_preference === 'hebrew' 
-              ? 'בחר סיפור חדש' 
-              : 'Choose a New Story'}
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+          {/* Story Themes */}
+          <div className="mb-8">
+            <h2 className="text-child-lg font-bold text-gray-800 mb-6">
+              {currentChild.language_preference === 'hebrew' 
+                ? 'בחר סיפור חדש' 
+                : 'Choose a New Story'}
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-6">
             {(currentChild && currentChild.interests && currentChild.interests.length > 0 
               ? storyThemes.filter(theme => currentChild.interests.includes(theme.id)) 
               : storyThemes)
@@ -236,21 +239,21 @@ const DashboardPage: React.FC = () => {
                   </h3>
                   <p className="text-child-sm text-gray-600">
                     {theme.description}
-                  </p>
-                </button>
-              ))}
+                    </p>
+                  </button>
+                ))}
+            </div>
           </div>
-        </div>
 
-        {/* Completed Stories */}
-        {stories && stories.filter(story => story.isCompleted).length > 0 && (
-          <div>
-            <h2 className="text-child-lg font-bold text-gray-800 mb-6">
-              {currentChild.language_preference === 'hebrew' 
-                ? 'סיפורים שהושלמו' 
-                : 'Completed Stories'}
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+          {/* Completed Stories */}
+          {stories && stories.filter(story => story.isCompleted).length > 0 && (
+            <div>
+              <h2 className="text-child-lg font-bold text-gray-800 mb-6">
+                {currentChild.language_preference === 'hebrew' 
+                  ? 'סיפורים שהושלמו' 
+                  : 'Completed Stories'}
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-6">
               {stories.filter(story => story.isCompleted).slice(0, 6).map(story => (
                 <div key={story.id} className="card-child">
                   <h3 className="text-child-base font-bold text-gray-800 mb-2">
@@ -270,30 +273,31 @@ const DashboardPage: React.FC = () => {
                     💬 {currentChild.language_preference === 'hebrew' ? 'קרא שוב' : 'Read Again'}
                   </button>
                 </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Loading State */}
-        {isGenerating && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="card-child text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4"></div>
-              <h3 className="text-child-base font-bold mb-2">
-                {currentChild.language_preference === 'hebrew' 
-                  ? 'יוצר סיפור מיוחד עבורך...' 
-                  : 'Creating a special story for you...'}
-              </h3>
-              <p className="text-child-sm text-gray-600">
-                {currentChild.language_preference === 'hebrew' 
-                  ? 'זה ייקח כמה שניות' 
-                  : 'This will take a few seconds'}
-              </p>
+          {/* Loading State */}
+          {isGenerating && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="card-child text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4"></div>
+                <h3 className="text-child-base font-bold mb-2">
+                  {currentChild.language_preference === 'hebrew' 
+                    ? 'יוצר סיפור מיוחד עבורך...' 
+                    : 'Creating a special story for you...'}
+                </h3>
+                <p className="text-child-sm text-gray-600">
+                  {currentChild.language_preference === 'hebrew' 
+                    ? 'זה ייקח כמה שניות' 
+                    : 'This will take a few seconds'}
+                </p>
+              </div>
             </div>
+          )}
           </div>
-        )}
-      </div>
+        </div>
       </div>
 
       {/* Close dropdown when clicking outside */}
