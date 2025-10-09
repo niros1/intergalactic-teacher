@@ -221,6 +221,8 @@ def create_story_prompt_for_structured_output(state: StoryGenerationState) -> st
         "- Use vocabulary appropriate for the reading level with 2-3 challenging words",
         "- Include diverse characters and positive values",
         "- Provide 2-4 meaningful choices that advance the story",
+        "- IMPORTANT: Write PLAIN TEXT ONLY. Do NOT use HTML tags like <p>, <br>, <div>, etc.",
+        "- Output pure story text without any markup or formatting tags",
     ]
     
     # Add enhanced context from previous chapters
@@ -294,7 +296,7 @@ def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
         
         # Create a structured prompt template
         prompt_template = ChatPromptTemplate.from_messages([
-            ("system", "You are an expert children's story writer creating educational, engaging, and safe content. You must respond with the exact fields specified in the schema."),
+            ("system", "You are an expert children's story writer creating educational, engaging, and safe content. You must respond with the exact fields specified in the schema. IMPORTANT: Write plain text only, without any HTML tags or markup."),
             ("user", "{prompt}")
         ])
         
@@ -412,6 +414,18 @@ def enhance_content_if_needed(state: StoryGenerationState) -> Dict[str, Any]:
 
 def format_story_content(content: str, language: str = "english") -> str:
     """Format story content with paragraph breaks and contextual emojis for better readability."""
+
+    # Remove any HTML tags that the LLM might have added
+    import re
+    content = re.sub(r'<[^>]+>', '', content)
+
+    # Remove common HTML entities
+    content = content.replace('&nbsp;', ' ')
+    content = content.replace('&amp;', '&')
+    content = content.replace('&lt;', '<')
+    content = content.replace('&gt;', '>')
+    content = content.replace('&quot;', '"')
+    content = content.replace('&#39;', "'")
 
     # Define emoji mappings based on keywords for different languages
     emoji_map_en = {
