@@ -105,20 +105,41 @@ export const useStoryRuntime = () => {
         
         // Add choices if available (only after the last chapter)
         if (currentStory.choices && currentStory.choices.length > 0) {
-          const choiceMessage: StoryMessage = {
-            id: `choices-${Date.now()}`,
-            role: 'assistant',
-            content: [{ 
-              type: 'text', 
-              text: currentChild.language_preference === 'hebrew' ? 'מה תרצה לעשות?' : 'What would you like to do?'
-            }],
-            createdAt: new Date(Date.now() + 2000), // Add after all chapters
-            metadata: { 
-              choices: currentStory.choices,
-              chapterNumber: currentStory.currentChapter
-            }
-          };
-          messagesToAdd.push(choiceMessage);
+          // Get the contextual question from the first choice (they all have the same question)
+          const choiceQuestion = currentStory.choices[0]?.choice_question;
+
+          // Only add a question message if we have a choice_question from the backend
+          // Otherwise, the question is already in the story content
+          if (choiceQuestion) {
+            const choiceMessage: StoryMessage = {
+              id: `choices-${Date.now()}`,
+              role: 'assistant',
+              content: [{
+                type: 'text',
+                text: choiceQuestion
+              }],
+              createdAt: new Date(Date.now() + 2000), // Add after all chapters
+              metadata: {
+                choices: currentStory.choices,
+                chapterNumber: currentStory.currentChapter
+              }
+            };
+            messagesToAdd.push(choiceMessage);
+          } else {
+            // No separate question message - choices will be shown directly
+            // The question is already embedded in the story content
+            const choiceMessage: StoryMessage = {
+              id: `choices-${Date.now()}`,
+              role: 'assistant',
+              content: [], // No text content, just metadata with choices
+              createdAt: new Date(Date.now() + 2000),
+              metadata: {
+                choices: currentStory.choices,
+                chapterNumber: currentStory.currentChapter
+              }
+            };
+            messagesToAdd.push(choiceMessage);
+          }
         }
       }
 
@@ -182,24 +203,43 @@ export const useStoryRuntime = () => {
 
   // Send choice options
   const sendChoiceOptions = useCallback((choices: Choice[]) => {
-    const isHebrew = currentChild?.language_preference === 'hebrew';
-    
-    const choiceMessage: StoryMessage = {
-      id: `choices-${Date.now()}`,
-      role: 'assistant',
-      content: [{ 
-        type: 'text', 
-        text: isHebrew ? 'מה תרצה לעשות?' : 'What would you like to do?'
-      }],
-      createdAt: new Date(),
-      metadata: { choices, chapterNumber: currentStory?.currentChapter }
-    };
+    // Get the contextual question from the first choice (they all have the same question)
+    const choiceQuestion = choices[0]?.choice_question;
 
-    setState(prev => ({
-      ...prev,
-      messages: [...prev.messages, choiceMessage]
-    }));
-  }, [currentChild?.language_preference, currentStory?.currentChapter]);
+    // Only add a question message if we have a choice_question from the backend
+    // Otherwise, the question is already in the story content
+    if (choiceQuestion) {
+      const choiceMessage: StoryMessage = {
+        id: `choices-${Date.now()}`,
+        role: 'assistant',
+        content: [{
+          type: 'text',
+          text: choiceQuestion
+        }],
+        createdAt: new Date(),
+        metadata: { choices, chapterNumber: currentStory?.currentChapter }
+      };
+
+      setState(prev => ({
+        ...prev,
+        messages: [...prev.messages, choiceMessage]
+      }));
+    } else {
+      // No separate question message - choices will be shown directly
+      const choiceMessage: StoryMessage = {
+        id: `choices-${Date.now()}`,
+        role: 'assistant',
+        content: [], // No text content, just metadata with choices
+        createdAt: new Date(),
+        metadata: { choices, chapterNumber: currentStory?.currentChapter }
+      };
+
+      setState(prev => ({
+        ...prev,
+        messages: [...prev.messages, choiceMessage]
+      }));
+    }
+  }, [currentStory?.currentChapter]);
 
   // Handle user choice selection
   const handleChoice = useCallback(async (choiceId: string, optionIndex: number, choiceText: string, messageId: string) => {

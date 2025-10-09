@@ -100,6 +100,7 @@ class StoryService:
                 previous_choices=previous_choices,
                 custom_user_input=custom_user_input,
                 story_content="",
+                choice_question="",  # Will be filled by generate_story_content
                 choices=[],
                 safety_score=0.0,
                 content_approved=False,
@@ -133,6 +134,7 @@ class StoryService:
                 "success": True,
                 "story_content": result["story_content"],
                 "choices": result["choices"],
+                "choice_question": result.get("choice_question"),  # Include the contextual question
                 "educational_elements": result.get("educational_elements", []),
                 "estimated_reading_time": result.get("estimated_reading_time", 5),
                 "safety_score": result.get("safety_score", 1.0),
@@ -206,7 +208,8 @@ class StoryService:
             # Create choices if any
             choices = generation_result.get("choices", [])
             if choices:
-                self._create_story_choices(story.id, 1, choices)
+                choice_question = generation_result.get("choice_question")
+                self._create_story_choices(story.id, 1, choices, choice_question)
             
             return story
             
@@ -219,16 +222,23 @@ class StoryService:
         self,
         story_id: int,
         chapter_number: int,
-        choices_data: List[Dict]
+        choices_data: List[Dict],
+        choice_question: Optional[str] = None
     ) -> None:
         """Create choice records for a story chapter."""
         try:
+            # IMPORTANT: The LLM MUST generate a contextual choice question
+            # We do not use hardcoded fallback questions
+            if not choice_question:
+                logger.error(f"Missing choice_question for story {story_id}, chapter {chapter_number}")
+                raise ValueError("Choice question is required - LLM must generate a contextual question")
+
             # Create the choice point
             choice = Choice(
                 story_id=story_id,
                 chapter_number=chapter_number,
                 position_in_chapter=1,
-                question="What should happen next?",
+                question=choice_question,
                 choices_data=choices_data,
                 default_choice_index=0,
                 is_critical_choice=True
@@ -557,7 +567,8 @@ class StoryService:
                     # Create choices for the new chapter if any were generated
                     new_choices = generation_result.get("choices", [])
                     if new_choices and not story_branch.is_ending:
-                        self._create_story_choices(story_session.story_id, target_chapter, new_choices)
+                        choice_question = generation_result.get("choice_question")
+                        self._create_story_choices(story_session.story_id, target_chapter, new_choices, choice_question)
                 
                 self.db.commit()
                 

@@ -247,12 +247,30 @@ async def generate_story(
         
         # Create Choice records for the generated choices
         choices_with_ids = []
+        # Get the contextual choice question from the LLM result
+        # Try both underscore and space versions in case Pydantic changes the key name
+        choice_question = result.get("choice_question") or result.get("choice question")
+
+        # IMPORTANT: The LLM MUST generate a contextual choice question
+        # We do not use hardcoded fallback questions like "What would you like to do?"
+        if not choice_question and result.get("choices"):
+            logger.error(f"LLM failed to generate choice_question. Result keys: {result.keys()}")
+            logger.error(f"Result dict: {result}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Story generation failed: Missing contextual choice question from LLM"
+            )
+
+        # Debug log to see what we're getting
+        logger.info(f"choice_question from result: {choice_question}")
+        logger.info(f"result keys: {result.keys()}")
+
         for i, choice_data in enumerate(result.get("choices", [])):
             choice = Choice(
                 story_id=story.id,
                 chapter_number=generation_request.chapter_number,
                 position_in_chapter=i + 1,
-                question="What would you like to do?",
+                question=choice_question,  # Use the LLM-generated contextual question
                 choices_data=[choice_data],  # Store the choice data
                 default_choice_index=0,
                 is_critical_choice=False
@@ -265,7 +283,8 @@ async def generate_story(
                 "id": str(choice.id),  # Convert to string for frontend
                 "text": choice_data.get("text", ""),  # No default fallback
                 "description": choice_data.get("description", ""),
-                "impact": choice_data.get("description", "")  # No default fallback
+                "impact": choice_data.get("description", ""),  # No default fallback
+                "choice_question": choice_question  # Add the contextual question to each choice
             }
             # Only add valid choices with actual text
             if choice_with_id["text"]:

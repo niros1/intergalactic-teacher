@@ -230,7 +230,7 @@ class StorySessionService:
                     Choice.story_id == session.story_id,
                     Choice.chapter_number == branch.leads_to_chapter
                 ).all()
-                
+
                 for choice in choices_query:
                     if choice.choices_data:
                         for option_index, option_data in enumerate(choice.choices_data):
@@ -240,7 +240,8 @@ class StorySessionService:
                                     'option_index': option_index,
                                     'text': option_data.get('text', ''),
                                     'impact': option_data.get('impact', 'normal'),
-                                    'description': option_data.get('description', '')
+                                    'description': option_data.get('description', ''),
+                                    'choice_question': choice.question  # Include the contextual question
                                 })
             
             result = {
@@ -320,14 +321,23 @@ class StorySessionService:
             # Create choices for the new chapter if any were generated and it's not the ending
             new_choices = []
             if generation_result.get("choices", []) and not new_chapter.is_ending:
-                story_service._create_story_choices(session.story_id, next_chapter, generation_result["choices"])
-                
+                # Get the choice_question from the LLM generation result
+                choice_question = generation_result.get("choice_question")
+
+                # Pass the choice_question to _create_story_choices
+                story_service._create_story_choices(
+                    session.story_id,
+                    next_chapter,
+                    generation_result["choices"],
+                    choice_question
+                )
+
                 # Get the created choices to return to frontend
                 choices_query = self.db.query(Choice).filter(
                     Choice.story_id == session.story_id,
                     Choice.chapter_number == next_chapter
                 ).all()
-                
+
                 for choice in choices_query:
                     if choice.choices_data:
                         for option_index, option_data in enumerate(choice.choices_data):
@@ -337,7 +347,8 @@ class StorySessionService:
                                     'option_index': option_index,
                                     'text': option_data.get('text', ''),
                                     'impact': option_data.get('impact', 'normal'),
-                                    'description': option_data.get('description', '')
+                                    'description': option_data.get('description', ''),
+                                    'choice_question': choice.question  # Include the contextual question
                                 })
             
             # Update session

@@ -51,6 +51,7 @@ export interface Choice {
   text: string
   impact: string
   nextChapter?: number
+  choice_question?: string  // The contextual question from the LLM
 }
 
 export interface StorySession {

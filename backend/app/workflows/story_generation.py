@@ -32,13 +32,14 @@ class Choice(BaseModel):
 class StoryContent(BaseModel):
     """Model for complete story generation output."""
     story_content: str = Field(..., description="The main story content for this chapter, written in direct storytelling voice")
+    choice_question: str = Field(..., description="A personalized, contextual question that leads into the choices. Should be specific to the story situation (e.g., 'What should Luna do next?' or 'How will the friends continue their adventure?')")
     choices: List[Choice] = Field(..., description="List of 2-4 choices for the child to make to continue the story")
     educational_elements: List[str] = Field(
-        default=["Reading comprehension", "Decision making"], 
+        default=["Reading comprehension", "Decision making"],
         description="Educational elements present in this chapter"
     )
     vocabulary_words: List[str] = Field(
-        default=[], 
+        default=[],
         description="List of challenging or educational vocabulary words used in this chapter"
     )
 
@@ -52,16 +53,17 @@ class StoryGenerationState(TypedDict):
     previous_chapters: List[str]
     previous_choices: List[Dict]
     custom_user_input: Optional[str]  # New field for custom user messages
-    
+
     # Generated content
     story_content: str
+    choice_question: str  # IMPORTANT: Contextual question from LLM
     choices: List[Dict[str, Any]]
-    
+
     # Safety and quality checks
     safety_score: float
     content_approved: bool
     content_issues: List[str]
-    
+
     # Metadata
     estimated_reading_time: int
     vocabulary_level: str
@@ -220,6 +222,10 @@ def create_story_prompt_for_structured_output(state: StoryGenerationState) -> st
         "- Start immediately with the story (no meta-commentary)",
         "- Use vocabulary appropriate for the reading level with 2-3 challenging words",
         "- Include diverse characters and positive values",
+        "- Create a personalized choice_question that relates to the current story situation",
+        "  * Use character names from the story (e.g., 'What should Sarah do next?')",
+        "  * Make it specific to the situation (e.g., 'How will they cross the river?')",
+        "  * Avoid generic questions like 'What would you like to do?'",
         "- Provide 2-4 meaningful choices that advance the story",
         "- IMPORTANT: Write PLAIN TEXT ONLY. Do NOT use HTML tags like <p>, <br>, <div>, etc.",
         "- Output pure story text without any markup or formatting tags",
@@ -314,6 +320,7 @@ def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
         # Convert to dictionary format expected by the workflow
         return {
             "story_content": result.story_content,
+            "choice_question": result.choice_question,
             "choices": [choice.dict() for choice in result.choices],
             "educational_elements": result.educational_elements,
             "vocabulary_words": result.vocabulary_words,
