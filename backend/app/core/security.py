@@ -64,11 +64,24 @@ def verify_token(token: str, token_type: str = "access") -> Optional[str]:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash."""
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        # Bcrypt has a 72-byte limit for passwords
+        if len(plain_password.encode('utf-8')) > 72:
+            return False
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception as e:
+        # Log the error but don't expose it to avoid information leakage
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Password verification failed: {str(e)}")
+        return False
 
 
 def get_password_hash(password: str) -> str:
     """Hash a password."""
+    # Bcrypt has a 72-byte limit, enforce it before hashing
+    if len(password.encode('utf-8')) > 72:
+        raise ValueError("Password cannot be longer than 72 bytes")
     return pwd_context.hash(password)
 
 

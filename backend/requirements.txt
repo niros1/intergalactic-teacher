@@ -16,6 +16,7 @@ python-redis-lock==4.0.0
 # Authentication & Security
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+bcrypt==4.0.1  # Pin bcrypt to 4.x for compatibility with passlib
 cryptography==43.0.1
 
 # LangGraph & AI - Updated to latest compatible versions
