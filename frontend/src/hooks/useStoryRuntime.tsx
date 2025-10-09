@@ -20,6 +20,7 @@ interface StoryRuntimeState {
   isLoading: boolean;
   sessionId: string | null;
   isInitialized: boolean;
+  usedChoiceMessageIds: Set<string>;
 }
 
 export const useStoryRuntime = () => {
@@ -31,6 +32,7 @@ export const useStoryRuntime = () => {
     isLoading: false,
     sessionId: null,
     isInitialized: false,
+    usedChoiceMessageIds: new Set(),
   });
 
   // Initialize story session and first message
@@ -200,11 +202,21 @@ export const useStoryRuntime = () => {
   }, [currentChild?.language_preference, currentStory?.currentChapter]);
 
   // Handle user choice selection
-  const handleChoice = useCallback(async (choiceId: string, optionIndex: number, choiceText: string) => {
+  const handleChoice = useCallback(async (choiceId: string, optionIndex: number, choiceText: string, messageId: string) => {
     if (!state.sessionId) return;
 
     try {
       setState(prev => ({ ...prev, isLoading: true }));
+
+      // Mark this message's choices as used
+      setState(prev => {
+        const newUsedIds = new Set(prev.usedChoiceMessageIds);
+        newUsedIds.add(messageId);
+        return {
+          ...prev,
+          usedChoiceMessageIds: newUsedIds
+        };
+      });
 
       // Add user choice message
       const userMessage: StoryMessage = {
@@ -278,22 +290,23 @@ export const useStoryRuntime = () => {
     return {
       messages: state.messages,
       isLoading: state.isLoading || isLoading,
-      
+      usedChoiceMessageIds: state.usedChoiceMessageIds,
+
       append: async (message: any) => {
         // Handle user messages (choices)
         if (message.role === 'user') {
-          const content = Array.isArray(message.content) 
+          const content = Array.isArray(message.content)
             ? message.content.find((c: any) => c.type === 'text')?.text || ''
             : message.content;
 
           // Check if this is a choice selection
           const lastMessage = state.messages[state.messages.length - 1];
           if (lastMessage?.metadata?.choices) {
-            const choice = lastMessage.metadata.choices.find(c => 
+            const choice = lastMessage.metadata.choices.find(c =>
               c.text.includes(content) || content.includes(c.text)
             );
             if (choice) {
-              await handleChoice(choice.id, choice.option_index, choice.text);
+              await handleChoice(choice.id, choice.option_index, choice.text, lastMessage.id);
               return;
             }
           }
@@ -303,7 +316,7 @@ export const useStoryRuntime = () => {
               content.toLowerCase().includes('ready') ||
               content.toLowerCase().includes('start') ||
               content.toLowerCase().includes('begin') ||
-              content.toLowerCase().includes('continue') || 
+              content.toLowerCase().includes('continue') ||
               content.toLowerCase().includes('next') ||
               content.toLowerCase().includes('go') ||
               content.toLowerCase().includes('כן') ||
@@ -322,7 +335,7 @@ export const useStoryRuntime = () => {
           }
         }
       },
-      
+
       thread: {
         mainItem: {
           id: 'main',

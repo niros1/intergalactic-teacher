@@ -138,29 +138,44 @@ const DashboardPage: React.FC = () => {
 
             {/* Dropdown Menu */}
             {showUserMenu && (
-              <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50">
-                <div className="px-4 py-2 border-b border-gray-100">
-                  <p className="text-sm font-semibold text-gray-800">{user?.name}</p>
-                  <p className="text-xs text-gray-500">{user?.email}</p>
+              <>
+                {/* Close dropdown when clicking outside */}
+                <div 
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowUserMenu(false)}
+                />
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-[9999]">
+                  <div className="px-4 py-2 border-b border-gray-100">
+                    <p className="text-sm font-semibold text-gray-800">{user?.name}</p>
+                    <p className="text-xs text-gray-500">{user?.email}</p>
+                  </div>
+                  
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      console.log('Child Settings button clicked!')
+                      navigate('/child/edit')
+                      setShowUserMenu(false)
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-purple-50 transition-colors"
+                  >
+                    {currentChild.language_preference === 'hebrew' ? 'הגדרות ילד' : 'Child Settings'}
+                  </button>
+                  
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      console.log('Logout button clicked!')
+                      handleLogout()
+                    }}
+                    className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    {currentChild.language_preference === 'hebrew' ? 'התנתק' : 'Sign Out'}
+                  </button>
                 </div>
-                
-                <button
-                  onClick={() => {
-                    navigate('/child/edit')
-                    setShowUserMenu(false)
-                  }}
-                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-purple-50 transition-colors"
-                >
-                  {currentChild.language_preference === 'hebrew' ? 'הגדרות ילד' : 'Child Settings'}
-                </button>
-                
-                <button
-                  onClick={handleLogout}
-                  className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                >
-                  {currentChild.language_preference === 'hebrew' ? 'התנתק' : 'Sign Out'}
-                </button>
-              </div>
+              </>
             )}
           </div>
           </div>
@@ -181,6 +196,36 @@ const DashboardPage: React.FC = () => {
                   : 'Ready for a new reading adventure?'}
               </p>
             </div>
+
+          {/* Story Themes */}
+          <div className="mb-8">
+            <h2 className="text-child-lg font-bold text-gray-800 mb-6">
+              {currentChild.language_preference === 'hebrew' 
+                ? 'בחר סיפור חדש' 
+                : 'Choose a New Story'}
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-6">
+            {(currentChild && currentChild.interests && currentChild.interests.length > 0 
+              ? storyThemes.filter(theme => currentChild.interests.includes(theme.id)) 
+              : storyThemes)
+              .map(theme => (
+                <button
+                  key={theme.id}
+                  onClick={() => handleStartNewStory(theme.id)}
+                  disabled={isGenerating}
+                  className="card-child text-left p-6 hover:transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <div className="text-4xl mb-3">{theme.emoji}</div>
+                  <h3 className="text-child-base font-bold text-gray-800 mb-2">
+                    {theme.label}
+                  </h3>
+                  <p className="text-child-sm text-gray-600">
+                    {theme.description}
+                    </p>
+                  </button>
+                ))}
+            </div>
+          </div>
 
           {/* Continue Reading Stories */}
           {stories && stories.filter(story => !story.isCompleted).length > 0 && (
@@ -214,36 +259,6 @@ const DashboardPage: React.FC = () => {
               </div>
             </div>
           )}
-
-          {/* Story Themes */}
-          <div className="mb-8">
-            <h2 className="text-child-lg font-bold text-gray-800 mb-6">
-              {currentChild.language_preference === 'hebrew' 
-                ? 'בחר סיפור חדש' 
-                : 'Choose a New Story'}
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-6">
-            {(currentChild && currentChild.interests && currentChild.interests.length > 0 
-              ? storyThemes.filter(theme => currentChild.interests.includes(theme.id)) 
-              : storyThemes)
-              .map(theme => (
-                <button
-                  key={theme.id}
-                  onClick={() => handleStartNewStory(theme.id)}
-                  disabled={isGenerating}
-                  className="card-child text-left p-6 hover:transform hover:scale-105 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <div className="text-4xl mb-3">{theme.emoji}</div>
-                  <h3 className="text-child-base font-bold text-gray-800 mb-2">
-                    {theme.label}
-                  </h3>
-                  <p className="text-child-sm text-gray-600">
-                    {theme.description}
-                    </p>
-                  </button>
-                ))}
-            </div>
-          </div>
 
           {/* Completed Stories */}
           {stories && stories.filter(story => story.isCompleted).length > 0 && (
@@ -300,13 +315,6 @@ const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Close dropdown when clicking outside */}
-      {showUserMenu && (
-        <div 
-          className="fixed inset-0 z-30"
-          onClick={() => setShowUserMenu(false)}
-        />
-      )}
     </div>
   )
 }

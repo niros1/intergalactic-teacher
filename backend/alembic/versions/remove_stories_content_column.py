@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'remove_content_column'
+revision = '99cc13666ebc'
 down_revision = None
 branch_labels = None
 depends_on = None

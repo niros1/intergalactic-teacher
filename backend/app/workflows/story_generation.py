@@ -410,29 +410,130 @@ def enhance_content_if_needed(state: StoryGenerationState) -> Dict[str, Any]:
     return {}
 
 
+def format_story_content(content: str, language: str = "english") -> str:
+    """Format story content with paragraph breaks and contextual emojis for better readability."""
+
+    # Define emoji mappings based on keywords for different languages
+    emoji_map_en = {
+        # Characters & Actions
+        "happy": "😊", "smiled": "😊", "laughed": "😄", "giggled": "😆",
+        "excited": "🤗", "surprised": "😮", "amazed": "😲", "wondered": "🤔",
+        "brave": "💪", "strong": "💪", "hero": "🦸", "friend": "👫",
+
+        # Nature & Places
+        "forest": "🌳", "tree": "🌲", "flowers": "🌸", "garden": "🏡",
+        "mountain": "⛰️", "ocean": "🌊", "river": "🏞️", "beach": "🏖️",
+        "sun": "☀️", "moon": "🌙", "star": "⭐", "rainbow": "🌈",
+        "cloud": "☁️", "rain": "🌧️", "snow": "❄️",
+
+        # Animals
+        "dog": "🐕", "cat": "🐱", "bird": "🐦", "butterfly": "🦋",
+        "rabbit": "🐰", "lion": "🦁", "elephant": "🐘", "dragon": "🐉",
+        "unicorn": "🦄", "fish": "🐟",
+
+        # Objects & Activities
+        "book": "📚", "treasure": "💎", "magic": "✨", "crown": "👑",
+        "castle": "🏰", "house": "🏠", "school": "🏫", "rocket": "🚀",
+        "car": "🚗", "bicycle": "🚲", "balloon": "🎈", "gift": "🎁",
+
+        # Emotions & Events
+        "celebration": "🎉", "party": "🎊", "success": "🎯", "victory": "🏆",
+        "music": "🎵", "dance": "💃", "game": "🎮", "adventure": "🗺️",
+    }
+
+    emoji_map_he = {
+        # תווים ופעולות
+        "שמח": "😊", "חייך": "😊", "צחק": "😄", "התרגש": "🤗",
+        "הופתע": "😮", "אמיץ": "💪", "גיבור": "🦸", "חבר": "👫",
+
+        # טבע ומקומות
+        "יער": "🌳", "עץ": "🌲", "פרחים": "🌸", "גן": "🏡",
+        "הר": "⛰️", "ים": "🌊", "נהר": "🏞️", "חוף": "🏖️",
+        "שמש": "☀️", "ירח": "🌙", "כוכב": "⭐", "קשת": "🌈",
+
+        # חיות
+        "כלב": "🐕", "חתול": "🐱", "ציפור": "🐦", "פרפר": "🦋",
+        "ארנב": "🐰", "אריה": "🦁", "פיל": "🐘", "דרקון": "🐉",
+
+        # חפצים ופעילויות
+        "ספר": "📚", "אוצר": "💎", "קסם": "✨", "כתר": "👑",
+        "טירה": "🏰", "בית": "🏠", "בית ספר": "🏫", "חלל": "🚀",
+    }
+
+    emoji_map = emoji_map_he if language == "hebrew" else emoji_map_en
+
+    # Split into sentences
+    sentences = []
+    current_sentence = []
+    words = content.split()
+
+    for word in words:
+        current_sentence.append(word)
+        # Check for sentence endings
+        if word.endswith(('.', '!', '?', '。', '！', '？')):
+            sentence_text = ' '.join(current_sentence)
+
+            # Add contextual emoji at the end of sentence if keyword found
+            sentence_lower = sentence_text.lower()
+            for keyword, emoji in emoji_map.items():
+                if keyword in sentence_lower and emoji not in sentence_text:
+                    sentence_text += f" {emoji}"
+                    break  # Only add one emoji per sentence
+
+            sentences.append(sentence_text)
+            current_sentence = []
+
+    # Add any remaining words as a sentence
+    if current_sentence:
+        sentences.append(' '.join(current_sentence))
+
+    # Group sentences into paragraphs (3-4 sentences each)
+    paragraphs = []
+    paragraph_sentences = []
+
+    for i, sentence in enumerate(sentences):
+        paragraph_sentences.append(sentence)
+
+        # Create new paragraph every 3-4 sentences
+        if len(paragraph_sentences) >= 3 or i == len(sentences) - 1:
+            paragraph_text = ' '.join(paragraph_sentences)
+            paragraphs.append(paragraph_text)
+            paragraph_sentences = []
+
+    # Join paragraphs with double line breaks for visual separation
+    formatted_content = '\n\n'.join(paragraphs)
+
+    return formatted_content
+
+
 def calculate_reading_metrics(state: StoryGenerationState) -> Dict[str, Any]:
-    """Calculate reading time and difficulty metrics."""
+    """Calculate reading time and difficulty metrics, and format the story content."""
     content = state["story_content"]
     child_age = state["child_preferences"].get("age", 9)
     reading_level = state["child_preferences"].get("reading_level", "beginner")
-    
+    language = state["child_preferences"].get("language", "english")
+
+    # Format the story content with paragraphs and emojis
+    formatted_content = format_story_content(content, language)
+
     # Estimate reading time based on word count and reading level
     word_count = len(content.split())
-    
+
     # Words per minute by age and reading level
     wpm_map = {
         "beginner": {7: 80, 8: 90, 9: 100, 10: 110, 11: 120, 12: 130},
         "intermediate": {7: 100, 8: 120, 9: 140, 10: 160, 11: 180, 12: 200},
         "advanced": {7: 120, 8: 150, 9: 180, 10: 210, 11: 240, 12: 270},
     }
-    
+
     wpm = wpm_map.get(reading_level, {}).get(child_age, 120)
     estimated_reading_time = max(1, round(word_count / wpm))
-    
+
     # Determine vocabulary level based on content
     vocabulary_level = reading_level
-    
+
     return {
+        "story_content": formatted_content,  # Return formatted content
         "estimated_reading_time": estimated_reading_time,
         "vocabulary_level": vocabulary_level,
     }

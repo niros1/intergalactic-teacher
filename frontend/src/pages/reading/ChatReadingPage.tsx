@@ -174,7 +174,7 @@ const ChatReadingPage: React.FC = () => {
     }, 100); // Small delay to ensure cancellation completes
   };
 
-  const handleChoiceClick = async (choiceText: string) => {
+  const handleChoiceClick = async (choiceText: string, messageId: string) => {
     if (runtime.append) {
       await runtime.append({
         role: 'user',
@@ -262,17 +262,17 @@ const ChatReadingPage: React.FC = () => {
                       direction: isHebrew ? 'rtl' : 'ltr',
                     }}
                   >
-                    <div className="text-base sm:text-lg font-medium leading-relaxed">
+                    <div className="text-base sm:text-lg font-medium leading-relaxed whitespace-pre-wrap">
                       {message.content[0]?.text || ''}
                     </div>
                     
                     {/* Story Choices */}
-                    {message.metadata?.choices && (
+                    {message.metadata?.choices && !runtime.usedChoiceMessageIds?.has(message.id) && (
                       <div className="mt-4 space-y-2">
                         {message.metadata.choices.map((choice: any) => (
                           <button
                             key={choice.id}
-                            onClick={() => handleChoiceClick(choice.text)}
+                            onClick={() => handleChoiceClick(choice.text, message.id)}
                             className="w-full p-3 bg-white/90 text-gray-800 rounded-xl hover:bg-white transition-all transform hover:scale-105 shadow-md text-left"
                             style={{ direction: isHebrew ? 'rtl' : 'ltr' }}
                           >
