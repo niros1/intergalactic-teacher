@@ -9,7 +9,7 @@ const DashboardPage: React.FC = () => {
   const navigate = useNavigate()
   const { user, logout } = useAuthStore()
   const { currentChild, loadChildren, isLoading: childLoading } = useChildStore()
-  const { generateStory, stories, isGenerating, loadStories } = useStoryStore()
+  const { generateStoryStreaming, stories, isGenerating, loadStories, currentStory } = useStoryStore()
   const [showUserMenu, setShowUserMenu] = useState(false)
 
   // Load children and stories when component mounts
@@ -70,17 +70,28 @@ const DashboardPage: React.FC = () => {
   ]
 
   const handleStartNewStory = async (theme: Theme) => {
-    if (!currentChild) return
+    console.log('handleStartNewStory called with theme:', theme)
+    console.log('currentChild:', currentChild)
+
+    if (!currentChild) {
+      console.error('No current child - cannot start story')
+      return
+    }
+
+    // Navigate to chat-reading IMMEDIATELY to show streaming
+    navigate('/chat-reading')
 
     try {
-      await generateStory({
+      console.log('Calling generateStoryStreaming...')
+      await generateStoryStreaming({
         childId: currentChild.id.toString(),
         theme,
         language: currentChild.language_preference as any,
         readingLevel: currentChild.reading_level as any,
       })
-      navigate('/chat-reading')
+      console.log('Story generation complete!')
     } catch (error) {
+      console.error('Error generating story:', error)
       // Error is handled by the store
     }
   }

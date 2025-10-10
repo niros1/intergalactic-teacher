@@ -170,21 +170,16 @@ def create_story_prompt(state: StoryGenerationState) -> str:
         ])
     
     prompt_parts.extend([
-        "", 
+        "",
         "⚠️ CRITICAL: The story_content must feel like a natural continuation of the previous chapters.",
         "Reference characters, events, and settings established earlier. Make the reader feel",
         "the story is building coherently toward something meaningful.",
-        "---------",
-        "OUTPUT FORMAT MUST BE VALID JSON !!!",
-        "Follow this JSON output example:",
-        "{",
-        "\"story_content\": \"ONLY the pure story text that continues seamlessly from previous chapters\",",
-        "\"choices\": [",
-        "  {\"text\": \"Choice 1 text\", \"description\": \"Optional description\"},",
-        "  {\"text\": \"Choice 2 text\", \"description\": \"Optional description\"},",
-        "  {\"text\": \"Choice 3 text\", \"description\": \"Optional description\"}",
-        "]",
-        "}"
+        "",
+        "IMPORTANT OUTPUT REQUIREMENTS:",
+        "- Write ONLY the pure story text (no JSON, no field names, no markup)",
+        "- Do NOT include field names like 'story_content:' or JSON structure",
+        "- Write as if you are directly telling the story to the child",
+        "- The system will automatically structure your output",
     ])
     
     # Ensure the prompt isn't too long for the LLM
@@ -274,56 +269,86 @@ def create_story_prompt_for_structured_output(state: StoryGenerationState) -> st
         ])
     
     prompt_parts.extend([
-        "", 
-        "IMPORTANT: Ensure story_content flows naturally from previous chapters.",
-        "Reference characters, events, and settings established earlier.",
-        "The response will be automatically structured with the required fields.",
+        "",
+        "IMPORTANT OUTPUT REQUIREMENTS:",
+        "- Write ONLY the pure story text in story_content (no JSON, no field names, no markup)",
+        "- The story_content field should contain ONLY the narrative text that the child will read",
+        "- Do NOT include field names like 'story_content:' or JSON structure in your output",
+        "- Write as if you are directly telling the story to the child",
+        "- Ensure the story flows naturally from previous chapters",
+        "- Reference characters, events, and settings established earlier",
+        "- The system will automatically structure your output into the required format",
     ])
-    
+
     return "\n".join(prompt_parts)
 
 
 def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
     """Generate story content using Ollama with structured output."""
     try:
-        # Initialize the base LLM
+        # Initialize the base LLM WITHOUT structured output for better streaming
+        # We'll parse the JSON manually to enable token-by-token streaming
         llm = ChatOllama(
             model=settings.OLLAMA_MODEL,
             base_url=settings.OLLAMA_BASE_URL,
             temperature=settings.OLLAMA_TEMPERATURE,
             num_predict=settings.OLLAMA_MAX_TOKENS,
+            format="json"  # Ask Ollama to return JSON format
         )
-        
-        # Create structured LLM that auto-guides to JSON matching StoryContent schema
-        structured_llm = llm.with_structured_output(StoryContent)
         
         # Create the personalized prompt
         prompt_text = create_story_prompt_for_structured_output(state)
         
-        # Create a structured prompt template
+        # Create prompt that requests JSON output with clear structure
+        # Note: Double braces {{ }} escape the braces so LangChain doesn't treat them as variables
         prompt_template = ChatPromptTemplate.from_messages([
-            ("system", "You are an expert children's story writer creating educational, engaging, and safe content. You must respond with the exact fields specified in the schema. IMPORTANT: Write plain text only, without any HTML tags or markup."),
+            ("system", """You are an expert children's story writer. You MUST respond with valid JSON in this exact format:
+
+{{
+  "story_content": "The pure narrative story text here",
+  "choice_question": "A question for the child",
+  "choices": [
+    {{"text": "Choice 1", "description": "Description 1"}},
+    {{"text": "Choice 2", "description": "Description 2"}}
+  ],
+  "educational_elements": ["element1", "element2"],
+  "vocabulary_words": ["word1", "word2"]
+}}
+
+IMPORTANT: Output ONLY valid JSON, no other text before or after."""),
             ("user", "{prompt}")
         ])
-        
-        # Create the chain: prompt -> structured_llm
-        chain = prompt_template | structured_llm
-        
-        # Invoke the chain to get structured output
-        logger.info("Generating story content with structured output...")
-        result: StoryContent = chain.invoke({"prompt": prompt_text})
-        
-        logger.info(f"Generated structured story content successfully")
-        logger.info(f"Story content length: {len(result.story_content)} characters")
-        logger.info(f"Number of choices: {len(result.choices)}")
-        
+
+        # Create the chain
+        chain = prompt_template | llm
+
+        # Invoke the chain to get JSON response
+        logger.info("Generating story content with JSON format...")
+        response = chain.invoke({"prompt": prompt_text})
+
+        # Parse the JSON response
+        import json
+        response_text = response.content if hasattr(response, 'content') else str(response)
+        result_json = json.loads(response_text)
+
+        # Extract fields from JSON
+        story_content = result_json.get("story_content", "")
+        choice_question = result_json.get("choice_question", "")
+        choices_data = result_json.get("choices", [])
+        educational_elements = result_json.get("educational_elements", [])
+        vocabulary_words = result_json.get("vocabulary_words", [])
+
+        logger.info(f"Generated story content successfully")
+        logger.info(f"Story content length: {len(story_content)} characters")
+        logger.info(f"Number of choices: {len(choices_data)}")
+
         # Convert to dictionary format expected by the workflow
         return {
-            "story_content": result.story_content,
-            "choice_question": result.choice_question,
-            "choices": [choice.dict() for choice in result.choices],
-            "educational_elements": result.educational_elements,
-            "vocabulary_words": result.vocabulary_words,
+            "story_content": story_content,
+            "choice_question": choice_question,
+            "choices": choices_data,
+            "educational_elements": educational_elements,
+            "vocabulary_words": vocabulary_words,
         }
         
     except Exception as e:

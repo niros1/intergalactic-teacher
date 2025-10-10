@@ -3,9 +3,20 @@ import { type StoryState, type Story, type GenerateStoryRequest, type StoryFilte
 import storyService from '../services/storyService'
 import { getErrorMessage } from '../services/api'
 
+interface StreamingState {
+  isStreaming: boolean
+  streamedContent: string
+  streamProgress: string | null
+}
+
 interface StoryStore extends StoryState {
+  streamingState: StreamingState
   setCurrentStory: (story: Story | null) => void
   generateStory: (request: GenerateStoryRequest) => Promise<Story>
+  generateStoryStreaming: (request: GenerateStoryRequest, onChunk?: (chunk: string) => void) => Promise<Story>
+  updateStreamingContent: (content: string) => void
+  updateStreamingProgress: (progress: string | null) => void
+  setIsStreaming: (isStreaming: boolean) => void
   loadStories: (filters?: StoryFilters) => Promise<void>
   getStoryRecommendations: (childId: string, limit?: number) => Promise<Story[]>
   startSession: (request: CreateSessionRequest) => Promise<{ session: StorySession; story: Story }>
@@ -25,6 +36,11 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
   isGenerating: false,
   isLoading: false,
   error: null,
+  streamingState: {
+    isStreaming: false,
+    streamedContent: '',
+    streamProgress: null,
+  },
 
   setCurrentStory: (story: Story | null) => {
     set({ currentStory: story })
@@ -32,6 +48,204 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
       localStorage.setItem('currentStory', JSON.stringify(story))
     } else {
       localStorage.removeItem('currentStory')
+    }
+  },
+
+  setIsStreaming: (isStreaming: boolean) => {
+    set(state => ({
+      streamingState: {
+        ...state.streamingState,
+        isStreaming,
+        ...(isStreaming ? {} : { streamedContent: '', streamProgress: null })
+      }
+    }))
+  },
+
+  updateStreamingContent: (content: string) => {
+    set(state => ({
+      streamingState: {
+        ...state.streamingState,
+        streamedContent: content
+      }
+    }))
+  },
+
+  updateStreamingProgress: (progress: string | null) => {
+    set(state => ({
+      streamingState: {
+        ...state.streamingState,
+        streamProgress: progress
+      }
+    }))
+  },
+
+  generateStoryStreaming: async (request: GenerateStoryRequest, onChunk?: (chunk: string) => void): Promise<Story> => {
+    const { setIsStreaming, updateStreamingContent, updateStreamingProgress } = get()
+
+    setIsStreaming(true)
+    set({ error: null, isGenerating: true })
+
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const token = localStorage.getItem('access_token')
+
+      if (!token) {
+        throw new Error('Authentication required')
+      }
+
+      // Build URL with query parameters
+      const url = new URL(`${API_URL}/stories/generate/stream`)
+      url.searchParams.append('child_id', request.childId)
+      url.searchParams.append('theme', request.theme)
+      url.searchParams.append('chapter_number', request.chapter_number?.toString() || '1')
+      if (request.title) {
+        url.searchParams.append('title', request.title)
+      }
+
+      // Use fetch with EventSource-like handling
+      const response = await fetch(url.toString(), {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'text/event-stream',
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+
+      if (!reader) {
+        throw new Error('No response body')
+      }
+
+      let accumulatedContent = ''
+      let finalStory: Story | null = null
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+
+        // Process complete SSE messages (events are separated by double newlines)
+        const events = buffer.split('\n\n')
+        buffer = events.pop() || '' // Keep incomplete event in buffer
+
+        for (const eventText of events) {
+          if (!eventText.trim()) continue
+
+          // Parse multi-line SSE event
+          const eventLines = eventText.split('\n')
+          let dataLine = ''
+
+          for (const line of eventLines) {
+            if (line.startsWith('data: ')) {
+              dataLine = line.substring(6) // Remove 'data: ' prefix
+              break
+            }
+          }
+
+          if (!dataLine) continue
+
+          try {
+            console.log('🔍 Parsing JSON:', dataLine.substring(0, 200))
+            const event = JSON.parse(dataLine)
+
+            console.log('📨 SSE Event received:', event.type, event)
+
+            switch (event.type) {
+              case 'progress':
+                if (event.progress) {
+                  updateStreamingProgress(`${event.progress.stage}: ${event.progress.description}`)
+                }
+                break
+
+              case 'content':
+                // event.data contains {chunk: string, is_complete: boolean}
+                if (event.data && event.data.chunk) {
+                  accumulatedContent += event.data.chunk
+                  updateStreamingContent(accumulatedContent)
+                  onChunk?.(event.data.chunk)
+                }
+                break
+
+              case 'safety_check':
+                updateStreamingProgress(`Safety Check: ${event.status || 'Checking'}...`)
+                break
+
+              case 'complete':
+                // The complete event now includes the full story object with real database ID
+                console.log('✅ Complete event received, event.data:', event.data)
+                if (event.data) {
+                  const storyData = event.data
+                  finalStory = {
+                    id: storyData.id,  // Real database ID from backend
+                    title: storyData.title,
+                    content: storyData.content || [],  // Array of paragraphs
+                    language: storyData.language || 'english',
+                    readingLevel: storyData.readingLevel || 'beginner',
+                    theme: storyData.theme,
+                    choices: storyData.choices || [],
+                    isCompleted: storyData.isCompleted || false,
+                    currentChapter: storyData.currentChapter || 1,
+                    totalChapters: storyData.totalChapters || 3,
+                    createdAt: storyData.createdAt || new Date().toISOString(),
+                  }
+                  console.log('✅ finalStory created with ID:', finalStory.id)
+                } else {
+                  console.warn('⚠️ Complete event received but event.data is missing')
+                }
+                break
+
+              case 'error':
+                throw new Error(event.message || 'Unknown error occurred')
+            }
+          } catch (parseError) {
+            console.error('Error parsing SSE event:', parseError)
+          }
+        }
+      }
+
+      setIsStreaming(false)
+
+      if (!finalStory) {
+        console.warn('⚠️ No finalStory from complete event - using fallback with timestamp ID')
+        // Build story from accumulated data
+        finalStory = {
+          id: Date.now().toString(),
+          title: request.title || `${request.theme} Adventure`,
+          content: accumulatedContent.split('\n\n').filter(p => p.trim()),
+          language: 'english',
+          readingLevel: 'beginner',
+          theme: request.theme,
+          choices: [],
+          isCompleted: false,
+          currentChapter: request.chapter_number || 1,
+          totalChapters: 3,
+          createdAt: new Date().toISOString(),
+        }
+      }
+
+      set(state => ({
+        currentStory: finalStory,
+        stories: [finalStory!, ...state.stories],
+        isGenerating: false,
+      }))
+
+      localStorage.setItem('currentStory', JSON.stringify(finalStory))
+      return finalStory
+
+    } catch (error) {
+      const errorMessage = getErrorMessage(error)
+      setIsStreaming(false)
+      set({ error: errorMessage, isGenerating: false })
+      throw error
     }
   },
 

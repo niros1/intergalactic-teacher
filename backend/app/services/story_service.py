@@ -1,8 +1,9 @@
 """Story service for managing story operations and AI generation."""
 
+import asyncio
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import AsyncGenerator, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -12,6 +13,14 @@ from app.models.story_chapter import StoryChapter
 from app.models.story_session import StorySession
 from app.workflows.story_generation import story_workflow, StoryGenerationState
 from app.workflows.content_safety import content_safety_workflow, ContentSafetyState
+from app.utils.sse_formatter import (
+    format_content_chunk,
+    format_safety_check_event,
+    format_metadata_event,
+    format_complete_event,
+    format_error_event,
+    format_node_event,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +159,416 @@ class StoryService:
                 "story_content": "",
                 "choices": []
             }
-    
+
+    async def generate_personalized_story_stream(
+        self,
+        child: Child,
+        theme: str,
+        chapter_number: int = 1,
+        story_session: Optional[StorySession] = None,
+        custom_user_input: Optional[str] = None
+    ) -> AsyncGenerator[str, None]:
+        """
+        Generate a personalized story with streaming support.
+
+        Yields SSE-formatted events as the story is being generated:
+        - node_event: Workflow node progress (generate_content, safety_check, etc.)
+        - content: Story content chunks as they're generated
+        - safety_check: Content safety validation results
+        - metadata: Reading time, vocabulary level, etc.
+        - complete: Final story with all data
+        - error: Any errors that occur
+
+        Args:
+            child: Child profile for personalization
+            theme: Story theme
+            chapter_number: Chapter number being generated
+            story_session: Optional existing story session for context
+            custom_user_input: Optional custom user input to incorporate
+
+        Yields:
+            SSE-formatted event strings
+        """
+        try:
+            # Prepare context from previous chapters and choices
+            previous_chapters = []
+            previous_choices = []
+
+            if story_session and story_session.story:
+                # Get previous chapters from story_chapters table
+                previous_chapter_records = self.db.query(StoryChapter).filter(
+                    StoryChapter.story_id == story_session.story_id,
+                    StoryChapter.chapter_number < chapter_number
+                ).order_by(StoryChapter.chapter_number).all()
+
+                previous_chapters = [
+                    chapter_record.content.strip()
+                    for chapter_record in previous_chapter_records
+                    if chapter_record.content.strip()
+                ]
+
+                logger.info(f"✅ Streaming: Found {len(previous_chapter_records)} previous chapters for context")
+
+                # Get the most recent choice for context
+                if story_session.choices_made and len(story_session.choices_made) > 0:
+                    last_choice_data = story_session.choices_made[-1]
+                    choice_id = last_choice_data.get("choice_id")
+                    option_index = last_choice_data.get("option_index", 0)
+
+                    if choice_id == "custom-choice" and "chosen_option" in last_choice_data:
+                        previous_choices = [{
+                            "question": last_choice_data.get("question", "Custom user input"),
+                            "chosen_option": last_choice_data["chosen_option"]
+                        }]
+                    elif choice_id and str(choice_id).isdigit():
+                        choice = self.db.query(Choice).filter(Choice.id == int(choice_id)).first()
+                        if choice and choice.choices_data and option_index < len(choice.choices_data):
+                            chosen_option_text = choice.choices_data[option_index].get("text", "")
+                            if chosen_option_text:
+                                previous_choices = [{
+                                    "question": choice.question,
+                                    "chosen_option": chosen_option_text
+                                }]
+
+            # Prepare initial state
+            initial_state = StoryGenerationState(
+                child_preferences=child.reading_preferences,
+                story_theme=theme,
+                chapter_number=chapter_number,
+                previous_chapters=previous_chapters,
+                previous_choices=previous_choices,
+                custom_user_input=custom_user_input,
+                story_content="",
+                choice_question="",
+                choices=[],
+                safety_score=0.0,
+                content_approved=False,
+                content_issues=[],
+                estimated_reading_time=0,
+                vocabulary_level="",
+                educational_elements=[]
+            )
+
+            logger.info(f"Starting streaming story generation for chapter {chapter_number}")
+
+            # Track accumulated state for final event
+            final_state = {}
+            current_content = []
+
+            # Buffer for cleaning streaming tokens
+            token_buffer = ""
+            inside_json = False
+            json_depth = 0
+
+            # Stream events from the workflow
+            # NOTE: This requires the workflow to be modified to support streaming
+            # The langchain-langgraph-expert should implement .astream_events() on the workflow
+
+            # Yield initial start event
+            yield format_node_event("workflow", "started", {
+                "chapter_number": chapter_number,
+                "theme": theme
+            })
+
+            # Use astream_events to get detailed streaming from LangGraph
+            # This will emit events for each node and token generation
+            try:
+                async for event in story_workflow.astream_events(
+                    initial_state,
+                    config={
+                        "metadata": {
+                            "child_id": child.id,
+                            "child_name": child.name,
+                            "theme": theme,
+                            "chapter_number": chapter_number,
+                            "has_custom_input": bool(custom_user_input),
+                            "previous_chapters_count": len(previous_chapters),
+                            "previous_choices_count": len(previous_choices)
+                        },
+                        "tags": ["story_generation", f"chapter_{chapter_number}", theme]
+                    },
+                    version="v2"  # Use v2 for better event streaming
+                ):
+                    event_type = event.get("event")
+                    event_name = event.get("name", "")
+                    event_data = event.get("data", {})
+
+                    logger.debug(f"Stream event: {event_type} - {event_name}")
+
+                    # Handle different event types
+                    if event_type == "on_chain_start":
+                        # Node started
+                        if "generate_content" in event_name:
+                            yield format_node_event("generate_content", "started")
+                        elif "safety_check" in event_name:
+                            yield format_node_event("safety_check", "started")
+                        elif "calculate_metrics" in event_name:
+                            yield format_node_event("calculate_metrics", "started")
+
+                    elif event_type == "on_chain_end":
+                        # Node completed - extract state updates
+                        output = event_data.get("output", {})
+
+                        if "generate_content" in event_name:
+                            # Content generation completed
+                            if "story_content" in output:
+                                content = output["story_content"]
+                                choice_question = output.get("choice_question", "")
+
+                                # CRITICAL: Clean JSON structure from story content
+                                # The LLM might return JSON structure even with .with_structured_output()
+                                import re
+                                import json
+
+                                cleaned_content = content
+
+                                # Check if the story_content contains JSON structure
+                                if '{' in cleaned_content and '"story_content"' in cleaned_content:
+                                    logger.warning("⚠️ LLM returned JSON in streaming output - cleaning it up")
+
+                                    try:
+                                        # Try to parse as JSON and extract story_content field
+                                        json_start = cleaned_content.find('{')
+                                        json_end = cleaned_content.rfind('}') + 1
+
+                                        if json_start >= 0 and json_end > json_start:
+                                            json_str = cleaned_content[json_start:json_end]
+                                            parsed_json = json.loads(json_str)
+
+                                            # Extract fields
+                                            if 'story_content' in parsed_json:
+                                                cleaned_content = parsed_json['story_content'].strip()
+                                                logger.info("✅ Extracted clean story_content from JSON")
+
+                                            # Also extract choice_question if it's in the JSON
+                                            if 'choice_question' in parsed_json and parsed_json['choice_question']:
+                                                choice_question = parsed_json['choice_question'].strip()
+                                                logger.info("✅ Extracted choice_question from JSON")
+
+                                    except json.JSONDecodeError:
+                                        logger.warning("Failed to parse JSON - using regex cleanup")
+                                        # Regex fallback
+                                        cleaned_content = re.sub(r'^\s*\{.*?"story_content"\s*:\s*"', '', cleaned_content, flags=re.DOTALL)
+                                        cleaned_content = re.sub(r'"\s*,\s*"choice_question".*?\}\s*$', '', cleaned_content, flags=re.DOTALL)
+                                        cleaned_content = cleaned_content.replace('\\n', '\n')
+                                        cleaned_content = re.sub(r'^\s*[\{\}"\']\s*', '', cleaned_content)
+                                        cleaned_content = re.sub(r'\s*[\{\}"\']\s*$', '', cleaned_content)
+
+                                cleaned_content = cleaned_content.strip()
+
+                                # Store cleaned content
+                                current_content.append(cleaned_content)
+                                final_state["story_content"] = cleaned_content
+                                final_state["choices"] = output.get("choices", [])
+                                final_state["choice_question"] = choice_question
+
+                                # Stream story_content AND choice_question naturally together
+                                # Split content by paragraphs for streaming
+                                paragraphs = cleaned_content.split("\n\n")
+                                for para in paragraphs:
+                                    if para.strip():
+                                        yield format_content_chunk(para.strip())
+                                        await asyncio.sleep(0.05)  # Small delay for streaming effect
+
+                                # Stream the choice_question as a natural continuation if it exists
+                                if choice_question:
+                                    # Add a small pause before the question
+                                    await asyncio.sleep(0.1)
+                                    yield format_content_chunk("\n\n" + choice_question)
+
+                                # DON'T stream the choices array - that will be sent in the complete event
+
+                            yield format_node_event("generate_content", "completed")
+
+                        elif "safety_check" in event_name:
+                            # Safety check completed
+                            safety_score = output.get("safety_score", 1.0)
+                            content_approved = output.get("content_approved", True)
+                            content_issues = output.get("content_issues", [])
+
+                            final_state["safety_score"] = safety_score
+                            final_state["content_approved"] = content_approved
+                            final_state["content_issues"] = content_issues
+
+                            yield format_safety_check_event(
+                                approved=content_approved,
+                                score=safety_score,
+                                issues=content_issues
+                            )
+                            yield format_node_event("safety_check", "completed")
+
+                        elif "calculate_metrics" in event_name:
+                            # Metrics calculation completed
+                            estimated_time = output.get("estimated_reading_time", 5)
+                            vocab_level = output.get("vocabulary_level", "")
+                            educational_elements = output.get("educational_elements", [])
+
+                            final_state["estimated_reading_time"] = estimated_time
+                            final_state["vocabulary_level"] = vocab_level
+                            final_state["educational_elements"] = educational_elements
+
+                            yield format_metadata_event(
+                                estimated_reading_time=estimated_time,
+                                vocabulary_level=vocab_level,
+                                educational_elements=educational_elements
+                            )
+                            yield format_node_event("calculate_metrics", "completed")
+
+                    elif event_type == "on_chat_model_stream":
+                        # Token-level streaming from LLM
+                        chunk = event_data.get("chunk")
+                        if chunk and hasattr(chunk, "content") and chunk.content:
+                            token = chunk.content
+
+                            # Stream tokens directly - we'll handle JSON structure on frontend
+                            # or wait for complete response
+                            yield format_content_chunk(token)
+
+                # Workflow completed - NOW SAVE TO DATABASE
+                logger.info("Streaming story generation completed successfully - saving to database")
+
+                # Save story to database (similar to POST /generate endpoint)
+                story_content = final_state.get("story_content", "")
+                choices = final_state.get("choices", [])
+                choice_question = final_state.get("choice_question", "")
+
+                # Create Story record
+                story = Story(
+                    title=f"{theme.capitalize()} Adventure",
+                    language=child.language_preference or "english",
+                    difficulty_level=child.reading_level or "beginner",
+                    themes=[theme],
+                    target_age_min=max(3, child.age - 2),
+                    target_age_max=min(18, child.age + 2),
+                    estimated_reading_time=final_state.get("estimated_reading_time", 5),
+                    total_chapters=3,
+                    has_choices=len(choices) > 0,
+                    generated_by_ai=True,
+                    content_safety_score=final_state.get("safety_score", 1.0),
+                    is_published=True
+                )
+
+                self.db.add(story)
+                self.db.flush()  # Get the story ID
+
+                # Create StoryChapter record for the generated content
+                chapter = StoryChapter(
+                    story_id=story.id,
+                    chapter_number=chapter_number,
+                    title=f"Chapter {chapter_number}",
+                    content=story_content,
+                    is_ending=False,
+                    is_published=True,
+                    estimated_reading_time=final_state.get("estimated_reading_time", 5),
+                    word_count=len(story_content.split()) if story_content else 0
+                )
+                self.db.add(chapter)
+                self.db.flush()
+
+                # Create Choice records with database IDs
+                choices_with_ids = []
+                if choices and choice_question:
+                    for i, choice_data in enumerate(choices):
+                        choice = Choice(
+                            story_id=story.id,
+                            chapter_number=chapter_number,
+                            position_in_chapter=i + 1,
+                            question=choice_question,
+                            choices_data=[choice_data],
+                            default_choice_index=0,
+                            is_critical_choice=False
+                        )
+                        self.db.add(choice)
+                        self.db.flush()
+
+                        # Add database ID to choice data
+                        choice_with_id = {
+                            "id": str(choice.id),
+                            "text": choice_data.get("text", ""),
+                            "description": choice_data.get("description", ""),
+                            "impact": choice_data.get("description", ""),
+                            "choice_question": choice_question
+                        }
+
+                        if choice_with_id["text"]:
+                            choices_with_ids.append(choice_with_id)
+
+                        # Create StoryBranch for this choice
+                        story_branch = StoryBranch(
+                            story_id=story.id,
+                            choice_id=choice.id,
+                            choice_option_index=0,
+                            branch_name=f"Branch from choice {choice.id}",
+                            content=f"You chose: {choice_data.get('text', 'Continue')}. The story continues...",
+                            leads_to_chapter=chapter_number + 1,
+                            is_ending=chapter_number >= 3
+                        )
+                        self.db.add(story_branch)
+
+                self.db.commit()
+                self.db.refresh(story)
+
+                logger.info(f"Story saved to database with ID: {story.id}")
+
+                # Clean up story content for frontend
+                import re
+                story_content_clean = re.sub(r'```json.*?```', '', story_content, flags=re.DOTALL)
+                story_content_clean = re.sub(r'Here is Chapter \d+ of the story:', '', story_content_clean)
+                story_content_clean = re.sub(r'Please let me know.*?continue.*?\.', '', story_content_clean, flags=re.IGNORECASE)
+                story_content_clean = story_content_clean.strip()
+
+                # Split into paragraphs
+                paragraphs = [p.strip() for p in story_content_clean.split('\n\n') if p.strip()]
+                clean_paragraphs = [p for p in paragraphs if not any(char in p for char in ['{', '}', '"story_content"', '```'])]
+
+                # Validate story content - DO NOT use hardcoded fallbacks
+                if not clean_paragraphs:
+                    logger.error(f"Story generation failed - no clean content generated. story_content: {story_content[:200] if story_content else 'None'}")
+                    yield format_error_event(
+                        error_message="Story generation failed: LLM did not generate valid story content",
+                        error_code="EMPTY_CONTENT"
+                    )
+                    return
+
+                logger.info(f"📨 Sending complete event with story ID: {story.id}, choices: {len(choices_with_ids)}")
+
+                # Build final story response with REAL database ID
+                yield format_complete_event({
+                    "id": str(story.id),  # Real database ID (integer)
+                    "success": True,
+                    "title": story.title,
+                    "content": clean_paragraphs,  # Array of clean paragraphs
+                    "story_content": story_content,  # Keep for backward compatibility
+                    "choices": choices_with_ids,  # Choices with real database IDs
+                    "choice_question": choice_question,
+                    "language": story.language,
+                    "readingLevel": story.difficulty_level,
+                    "theme": theme,
+                    "educational_elements": final_state.get("educational_elements", []),
+                    "estimated_reading_time": story.estimated_reading_time,
+                    "safety_score": final_state.get("safety_score", 1.0),
+                    "content_approved": final_state.get("content_approved", True),
+                    "vocabulary_level": final_state.get("vocabulary_level", child.reading_level),
+                    "isCompleted": False,
+                    "currentChapter": chapter_number,
+                    "totalChapters": story.total_chapters,
+                    "createdAt": story.created_at.isoformat()
+                })
+
+            except Exception as stream_error:
+                logger.error(f"Error during workflow streaming: {stream_error}")
+                yield format_error_event(
+                    error_message=f"Story generation failed: {str(stream_error)}",
+                    error_code="WORKFLOW_ERROR"
+                )
+
+        except Exception as e:
+            logger.error(f"Error in streaming story generation: {e}", exc_info=True)
+            yield format_error_event(
+                error_message=f"Failed to start story generation: {str(e)}",
+                error_code="INITIALIZATION_ERROR"
+            )
+
     def create_story_with_ai(
         self,
         child: Child,

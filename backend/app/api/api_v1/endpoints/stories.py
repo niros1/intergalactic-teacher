@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, get_current_active_user
@@ -210,9 +211,14 @@ async def generate_story(
         for p in paragraphs:
             if not any(char in p for char in ['{', '}', '"story_content"', '```']):
                 clean_paragraphs.append(p)
-        
+
+        # Validate story content - DO NOT use hardcoded fallbacks
         if not clean_paragraphs:
-            clean_paragraphs = [story_content] if story_content else ["Once upon a time..."]
+            logger.error(f"Story generation failed - no clean content generated. story_content: {story_content[:200] if story_content else 'None'}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Story generation failed: LLM did not generate valid story content"
+            )
         
         # Save story to database so choices can be persisted
         from app.models.story import Story, Choice, StoryBranch
@@ -333,6 +339,75 @@ async def generate_story(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to generate story"
+        )
+
+
+@router.get("/generate/stream")
+async def generate_story_stream(
+    child_id: int = Query(..., description="Child ID for personalization"),
+    theme: str = Query(..., description="Story theme"),
+    chapter_number: int = Query(1, description="Chapter number to generate"),
+    title: Optional[str] = Query(None, description="Story title"),
+    token: Optional[str] = Query(None, description="Authentication token"),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate a new personalized story with SSE streaming.
+
+    This endpoint streams story generation events in real-time:
+    - Progress updates (workflow nodes)
+    - Content chunks as they're generated
+    - Safety check results
+    - Metadata (reading time, vocabulary level)
+    - Final complete story
+
+    Use EventSource on the client side to consume the stream.
+    """
+    try:
+        story_service = StoryService(db)
+        child_service = ChildService(db)
+
+        # Check access
+        if not child_service.check_child_access(child_id, current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to this child profile"
+            )
+
+        child = child_service.get_child_by_id(child_id)
+        if not child:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Child not found"
+            )
+
+        logger.info(f"Starting streaming story generation for child: {child_id}, theme: {theme}")
+
+        # Return streaming response
+        return StreamingResponse(
+            story_service.generate_personalized_story_stream(
+                child=child,
+                theme=theme,
+                chapter_number=chapter_number,
+                story_session=None,
+                custom_user_input=None
+            ),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",  # Disable nginx buffering
+                "Connection": "keep-alive",
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error starting streaming story generation: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to start story streaming"
         )
 
 

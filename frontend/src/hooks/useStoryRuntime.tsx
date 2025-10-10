@@ -24,9 +24,9 @@ interface StoryRuntimeState {
 }
 
 export const useStoryRuntime = () => {
-  const { currentStory, makeChoice, isLoading, startSession } = useStoryStore();
+  const { currentStory, makeChoice, isLoading, startSession, streamingState } = useStoryStore();
   const { currentChild } = useChildStore();
-  
+
   const [state, setState] = useState<StoryRuntimeState>({
     messages: [],
     isLoading: false,
@@ -68,9 +68,10 @@ export const useStoryRuntime = () => {
 
       // For existing stories, load all previous chapters
       const messagesToAdd: StoryMessage[] = [welcomeMessage];
-      
+
       // If this is an existing story with content, add all chapters up to current
-      if (currentStory.content && currentStory.content.length > 0) {
+      // BUT: Don't load content if we're currently streaming (story is being generated)
+      if (currentStory.content && currentStory.content.length > 0 && !streamingState.isStreaming) {
         // If content is an array, each element is a separate chapter
         if (Array.isArray(currentStory.content)) {
           // Add each chapter as a separate message
@@ -392,6 +393,55 @@ export const useStoryRuntime = () => {
     }
   }, [currentStory, currentChild, state.sessionId, state.isInitialized, initializeStory]);
 
+  // Watch for streaming content during story generation
+  useEffect(() => {
+    console.log('🔄 Streaming useEffect triggered:', {
+      isStreaming: streamingState.isStreaming,
+      contentLength: streamingState.streamedContent?.length,
+      isInitialized: state.isInitialized
+    });
+
+    if (streamingState.isStreaming && streamingState.streamedContent && state.isInitialized) {
+      // Find or create the streaming message
+      const streamingMessageId = `streaming-${currentStory?.id || 'temp'}`;
+      const existingMessageIndex = state.messages.findIndex(m => m.id === streamingMessageId);
+
+      console.log('📝 Updating streaming message:', {
+        messageId: streamingMessageId,
+        existingIndex: existingMessageIndex,
+        contentPreview: streamingState.streamedContent.substring(0, 50)
+      });
+
+      if (existingMessageIndex >= 0) {
+        // Update existing streaming message
+        setState(prev => {
+          const newMessages = [...prev.messages];
+          newMessages[existingMessageIndex] = {
+            ...newMessages[existingMessageIndex],
+            content: [{ type: 'text', text: streamingState.streamedContent }]
+          };
+          return { ...prev, messages: newMessages };
+        });
+      } else {
+        // Create new streaming message
+        const streamingMessage: StoryMessage = {
+          id: streamingMessageId,
+          role: 'assistant',
+          content: [{ type: 'text', text: streamingState.streamedContent }],
+          createdAt: new Date(),
+          metadata: {
+            storyId: currentStory?.id,
+            chapterNumber: currentStory?.currentChapter
+          }
+        };
+        setState(prev => ({
+          ...prev,
+          messages: [...prev.messages, streamingMessage]
+        }));
+      }
+    }
+  }, [streamingState.isStreaming, streamingState.streamedContent, state.isInitialized, state.messages, currentStory?.id, currentStory?.currentChapter]);
+
   // Watch for story content changes (new chapters from backend)
   useEffect(() => {
     if (currentStory && currentStory.content && state.sessionId && state.isInitialized) {
@@ -399,9 +449,9 @@ export const useStoryRuntime = () => {
       const lastStoryMessage = state.messages
         .filter(msg => msg.metadata?.chapterNumber)
         .pop();
-      
+
       const currentChapterInMessages = lastStoryMessage?.metadata?.chapterNumber || 0;
-      
+
       // If we have a new chapter from backend that's not yet displayed, send it to chat
       if (currentStory.currentChapter > currentChapterInMessages) {
         // Add a delay for better UX, especially for first chapter after welcome
