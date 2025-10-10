@@ -463,5 +463,23 @@ export const useStoryRuntime = () => {
     }
   }, [currentStory?.currentChapter, currentStory?.content, state.sessionId, state.messages, state.isInitialized, sendCurrentChapter]);
 
+  // Watch for choices after streaming completes
+  useEffect(() => {
+    // When streaming stops and we have choices, add them to messages
+    if (!streamingState.isStreaming && currentStory?.choices && currentStory.choices.length > 0 && state.isInitialized) {
+      // Check if choices are already displayed for current chapter
+      const hasChoicesForCurrentChapter = state.messages.some(msg =>
+        msg.metadata?.choices && msg.metadata?.chapterNumber === currentStory.currentChapter
+      );
+
+      if (!hasChoicesForCurrentChapter) {
+        console.log('💡 Streaming finished - adding choices to messages:', currentStory.choices);
+        setTimeout(() => {
+          sendChoiceOptions(currentStory.choices!);
+        }, 500); // Small delay after streaming stops
+      }
+    }
+  }, [streamingState.isStreaming, currentStory?.choices, currentStory?.currentChapter, state.isInitialized, state.messages, sendChoiceOptions]);
+
   return runtime;
 };
