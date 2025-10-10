@@ -125,6 +125,9 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
       let accumulatedContent = ''
       let finalStory: Story | null = null
       let buffer = ''
+      let jsonBuffer = '' // Buffer to accumulate JSON tokens
+      let insideStoryContent = false // Track if we're inside story_content field
+      let braceDepth = 0 // Track JSON depth
 
       while (true) {
         const { done, value } = await reader.read()
@@ -169,9 +172,38 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
               case 'content':
                 // event.data contains {chunk: string, is_complete: boolean}
                 if (event.data && event.data.chunk) {
-                  accumulatedContent += event.data.chunk
-                  updateStreamingContent(accumulatedContent)
-                  onChunk?.(event.data.chunk)
+                  const chunk = event.data.chunk
+
+                  // Filter JSON structure - only show story_content value
+                  for (let i = 0; i < chunk.length; i++) {
+                    const char = chunk[i]
+                    jsonBuffer += char
+
+                    if (char === '{') braceDepth++
+                    if (char === '}') braceDepth--
+
+                    // Check if we're entering story_content field
+                    if (jsonBuffer.endsWith('"story_content": "')) {
+                      insideStoryContent = true
+                      jsonBuffer = '' // Clear buffer, we're inside the content now
+                      continue
+                    }
+
+                    // If inside story_content, accumulate only the actual story text
+                    if (insideStoryContent) {
+                      // Check for end of story_content (closing quote not preceded by backslash)
+                      if (char === '"' && (i === 0 || chunk[i-1] !== '\\')) {
+                        insideStoryContent = false
+                        jsonBuffer = ''
+                        continue
+                      }
+
+                      // Accumulate story content
+                      accumulatedContent += char
+                      updateStreamingContent(accumulatedContent)
+                      onChunk?.(char)
+                    }
+                  }
                 }
                 break
 
