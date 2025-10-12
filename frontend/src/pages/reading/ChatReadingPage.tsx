@@ -228,15 +228,15 @@ const ChatReadingPage: React.FC = () => {
           <div className="w-full sm:w-20 flex justify-center sm:justify-end order-3 mt-3 sm:mt-0">
             <div className="text-center">
               <div className="w-24 sm:w-16 h-3 bg-gray-200 rounded-full overflow-hidden">
-                <div 
+                <div
                   className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500 ease-out rounded-full"
-                  style={{ 
-                    width: `${((currentStory.currentChapter - 1) / currentStory.totalChapters) * 100}%` 
+                  style={{
+                    width: `${(currentStory.currentChapter / currentStory.totalChapters) * 100}%`
                   }}
                 />
               </div>
               <div className="text-xs mt-1 font-bold text-gray-600">
-                {Math.round(((currentStory.currentChapter - 1) / currentStory.totalChapters) * 100)}%
+                {Math.round((currentStory.currentChapter / currentStory.totalChapters) * 100)}%
               </div>
             </div>
           </div>

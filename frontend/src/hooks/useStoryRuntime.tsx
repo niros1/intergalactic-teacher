@@ -505,13 +505,13 @@ export const useStoryRuntime = () => {
     const justFinishedStreaming = wasStreamingRef.current && !streamingState.isStreaming;
     wasStreamingRef.current = streamingState.isStreaming;
 
-    console.log('🎯 Choices effect triggered:', {
-      justFinishedStreaming,
-      hasChoices: !!currentStory?.choices,
-      choicesCount: currentStory?.choices?.length,
-      currentChapter: currentStory?.currentChapter,
-      isInitialized: state.isInitialized
-    });
+    // console.log('🎯 Choices effect triggered:', {
+    //   justFinishedStreaming,
+    //   hasChoices: !!currentStory?.choices,
+    //   choicesCount: currentStory?.choices?.length,
+    //   currentChapter: currentStory?.currentChapter,
+    //   isInitialized: state.isInitialized
+    // });
 
     if (justFinishedStreaming && currentStory?.choices && currentStory.choices.length > 0 && state.isInitialized) {
       // Check if choices are already displayed for current chapter

@@ -447,7 +447,12 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
       let insideStoryContent = false
       let braceDepth = 0
       let finalChoices: any[] = []
-      let nextChapter = (currentStory?.currentChapter || 1) + 1
+      // When making a choice, we're generating the NEXT chapter
+      // But don't exceed totalChapters
+      const currentChapterNum = currentStory?.currentChapter || 1
+      const totalChapters = currentStory?.totalChapters || 3
+      const expectedNextChapter = Math.min(currentChapterNum + 1, totalChapters)
+      let nextChapter = expectedNextChapter
       let isEnding = false
 
       while (true) {
@@ -532,9 +537,29 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
               case 'complete':
                 // Extract choices and chapter info from complete event
                 finalChoices = event.data?.choices || event.new_choices || event.data?.new_choices || []
-                nextChapter = event.data?.currentChapter || event.next_chapter || event.data?.next_chapter || nextChapter
+
+                // Backend sends currentChapter, which should be the chapter that was just generated
+                const backendChapter = event.data?.currentChapter || event.next_chapter || event.data?.next_chapter
+
+                // WORKAROUND: Backend sometimes sends incorrect chapter number
+                // Use the expected chapter (current + 1) unless backend sends a higher number
+                if (backendChapter && backendChapter > expectedNextChapter) {
+                  nextChapter = backendChapter
+                } else {
+                  // Use our calculated expected chapter
+                  nextChapter = expectedNextChapter
+                }
+
                 isEnding = event.data?.isCompleted || event.is_ending || event.data?.is_ending || false
-                console.log('🎬 Complete event received:', { finalChoices, nextChapter, isEnding, eventData: event.data })
+                console.log('🎬 Complete event received:', {
+                  finalChoices,
+                  backendChapter,
+                  expectedNextChapter,
+                  nextChapter,
+                  isEnding,
+                  currentStoryChapter: currentStory?.currentChapter,
+                  eventData: event.data
+                })
                 break
 
               case 'error':
@@ -554,13 +579,32 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
           .split('\n\n')
           .filter((p: string) => p.trim().length > 0)
 
+        console.log('📝 Updating story after streaming:', {
+          oldChapter: currentStory.currentChapter,
+          newChapter: nextChapter,
+          totalChapters: currentStory.totalChapters,
+          choicesCount: finalChoices.length,
+          isEnding,
+          shouldBeEnding: nextChapter >= (currentStory.totalChapters || 3)
+        })
+
+        // Mark as completed if we've reached or exceeded the total chapters
+        const shouldComplete = isEnding || nextChapter >= (currentStory.totalChapters || 3)
+
         const updatedStory: Story = {
           ...currentStory,
           content: contentParagraphs,
-          choices: finalChoices,
-          isCompleted: isEnding,
+          choices: shouldComplete ? [] : finalChoices, // Clear choices if story is complete
+          isCompleted: shouldComplete,
           currentChapter: nextChapter
         }
+
+        console.log('✅ Updated story object:', {
+          id: updatedStory.id,
+          currentChapter: updatedStory.currentChapter,
+          totalChapters: updatedStory.totalChapters,
+          choicesCount: updatedStory.choices.length
+        })
 
         // Update the story in the stories array
         const updatedStories = get().stories.map(story =>
