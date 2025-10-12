@@ -157,10 +157,7 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
           if (!dataLine) continue
 
           try {
-            console.log('🔍 Parsing JSON:', dataLine.substring(0, 200))
             const event = JSON.parse(dataLine)
-
-            console.log('📨 SSE Event received:', event.type, event)
 
             switch (event.type) {
               case 'progress':
@@ -213,7 +210,6 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
 
               case 'complete':
                 // The complete event now includes the full story object with real database ID
-                console.log('✅ Complete event received, event.data:', event.data)
                 if (event.data) {
                   const storyData = event.data
                   finalStory = {
@@ -229,9 +225,6 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
                     totalChapters: storyData.totalChapters || 3,
                     createdAt: storyData.createdAt || new Date().toISOString(),
                   }
-                  console.log('✅ finalStory created with ID:', finalStory.id)
-                } else {
-                  console.warn('⚠️ Complete event received but event.data is missing')
                 }
                 break
 
@@ -247,7 +240,6 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
       setIsStreaming(false)
 
       if (!finalStory) {
-        console.warn('⚠️ No finalStory from complete event - using fallback with timestamp ID')
         // Build story from accumulated data
         finalStory = {
           id: Date.now().toString(),
@@ -406,54 +398,187 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
   },
 
   makeChoice: async (sessionId: string, choice: MakeChoiceRequest) => {
+    const { currentStory, setIsStreaming, updateStreamingContent, updateStreamingProgress } = get()
+
+    // Start streaming state
+    setIsStreaming(true)
     set({ isLoading: true, error: null })
+
     try {
-      const result = await storyService.makeStoryChoice(sessionId, choice)
-      
-      const { currentStory } = get()
-      if (currentStory) {
-        // Handle actual backend response format (cast to any to avoid type conflicts)
-        const backendResult = result as any
-        const branchContent = backendResult.branch_content || ""
-        
-        // Split branch content into paragraphs for display
-        const contentParagraphs = branchContent ? 
-          branchContent.split('\n\n').filter((p: string) => p.trim().length > 0) : 
-          ["Continue reading..."]
-        
-        // Replace current content with new chapter content (don't append)
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const token = localStorage.getItem('access_token')
+
+      if (!token) {
+        throw new Error('Authentication required')
+      }
+
+      // Build URL with query parameters for the streaming endpoint
+      const url = new URL(`${API_URL}/stories/sessions/${sessionId}/choices/stream`)
+      url.searchParams.append('choice_id', choice.choiceId)
+      url.searchParams.append('option_index', choice.optionIndex?.toString() || '0')
+
+      if (choice.customText) {
+        url.searchParams.append('custom_text', choice.customText)
+      }
+
+      // Use fetch for SSE streaming
+      const response = await fetch(url.toString(), {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'text/event-stream',
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+
+      if (!reader) {
+        throw new Error('No response body')
+      }
+
+      let accumulatedContent = ''
+      let buffer = ''
+      let jsonBuffer = ''
+      let insideStoryContent = false
+      let braceDepth = 0
+      let finalChoices: any[] = []
+      let nextChapter = (currentStory?.currentChapter || 1) + 1
+      let isEnding = false
+
+      while (true) {
+        const { done, value } = await reader.read()
+
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+
+        // Process complete SSE messages (events are separated by double newlines)
+        const events = buffer.split('\n\n')
+        buffer = events.pop() || '' // Keep incomplete event in buffer
+
+        for (const eventText of events) {
+          if (!eventText.trim()) continue
+
+          // Parse multi-line SSE event
+          const eventLines = eventText.split('\n')
+          let eventType = ''
+          let dataLine = ''
+
+          for (const line of eventLines) {
+            if (line.startsWith('event: ')) {
+              eventType = line.substring(7) // Remove 'event: ' prefix
+            } else if (line.startsWith('data: ')) {
+              dataLine = line.substring(6) // Remove 'data: ' prefix
+            }
+          }
+
+          if (!dataLine) continue
+
+          try {
+            const event = JSON.parse(dataLine)
+
+            const type = event.type || eventType
+
+            switch (type) {
+              case 'progress':
+                if (event.progress) {
+                  updateStreamingProgress(`${event.progress.stage}: ${event.progress.description}`)
+                } else if (event.message) {
+                  updateStreamingProgress(event.message)
+                }
+                break
+
+              case 'content':
+                if (event.data && event.data.chunk) {
+                  const chunk = event.data.chunk
+
+                  // Same JSON filtering logic as generateStoryStreaming
+                  for (let i = 0; i < chunk.length; i++) {
+                    const char = chunk[i]
+                    jsonBuffer += char
+
+                    if (char === '{') braceDepth++
+                    if (char === '}') braceDepth--
+
+                    // Check if we're entering story_content field
+                    if (jsonBuffer.endsWith('"story_content": "')) {
+                      insideStoryContent = true
+                      jsonBuffer = ''
+                      continue
+                    }
+
+                    // If inside story_content, accumulate only the actual story text
+                    if (insideStoryContent) {
+                      // Check for end of story_content (closing quote not preceded by backslash)
+                      if (char === '"' && (i === 0 || chunk[i-1] !== '\\')) {
+                        insideStoryContent = false
+                        jsonBuffer = ''
+                        continue
+                      }
+
+                      // Accumulate story content
+                      accumulatedContent += char
+                      updateStreamingContent(accumulatedContent)
+                    }
+                  }
+                }
+                break
+
+              case 'complete':
+                // Extract choices and chapter info from complete event
+                finalChoices = event.new_choices || event.data?.new_choices || []
+                nextChapter = event.next_chapter || event.data?.next_chapter || nextChapter
+                isEnding = event.is_ending || event.data?.is_ending || false
+                break
+
+              case 'error':
+                throw new Error(event.message || 'Unknown error occurred')
+            }
+          } catch (parseError) {
+            console.error('Error parsing SSE event:', parseError)
+          }
+        }
+      }
+
+      setIsStreaming(false)
+
+      // Update story with streamed content
+      if (currentStory && accumulatedContent) {
+        const contentParagraphs = accumulatedContent
+          .split('\n\n')
+          .filter((p: string) => p.trim().length > 0)
+
         const updatedStory: Story = {
           ...currentStory,
-          content: contentParagraphs,  // Replace content with new chapter
-          choices: backendResult.new_choices || [], // Use new_choices from backend response
-          isCompleted: backendResult.is_ending || false,
-          currentChapter: backendResult.next_chapter || (currentStory.currentChapter + 1)
+          content: contentParagraphs,
+          choices: finalChoices,
+          isCompleted: isEnding,
+          currentChapter: nextChapter
         }
-        
-        // Also update the story in the stories array
-        const updatedStories = get().stories.map(story => 
+
+        // Update the story in the stories array
+        const updatedStories = get().stories.map(story =>
           story.id === updatedStory.id ? updatedStory : story
         )
-        
+
         set({
           currentStory: updatedStory,
           stories: updatedStories,
           isLoading: false
         })
-        
+
         localStorage.setItem('currentStory', JSON.stringify(updatedStory))
-        
-        // Log for debugging
-        console.log('Choice processed successfully:', {
-          newChapter: updatedStory.currentChapter,
-          contentLength: contentParagraphs.length,
-          isCompleted: updatedStory.isCompleted
-        })
       } else {
         set({ isLoading: false })
       }
     } catch (error) {
       const errorMessage = getErrorMessage(error)
+      setIsStreaming(false)
       set({
         error: errorMessage,
         isLoading: false
@@ -597,12 +722,7 @@ if (typeof window !== 'undefined') {
       console.log('⚠️  Note: This does not clear child store or session data')
     }
   }
-  console.log('🔍 Debug helpers available:')
-  console.log('- window.storyStore: Full Zustand store')
-  console.log('- window.debugStory.getCurrentStory(): Get current story')
-  console.log('- window.debugStory.getAllStories(): Get all stories')
-  console.log('- window.debugStory.getFullState(): Get full store state')
-  console.log('- window.debugStory.inspectCurrentStoryContent(): Detailed current story debug')
-  console.log('- window.debugStory.cleanCurrentStory(): Clear current story only')
-  console.log('- window.debugStory.cleanAllState(): Clear all story state')
+  // Debug helpers available on window.storyStore and window.debugStory
+  // Available methods: getCurrentStory(), getAllStories(), getFullState(),
+  // inspectCurrentStoryContent(), cleanCurrentStory(), cleanAllState()
 }

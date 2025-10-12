@@ -725,3 +725,138 @@ async def make_story_choice(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to make story choice"
         )
+
+
+@router.get("/sessions/{session_id}/choices/stream")
+async def make_story_choice_stream(
+    session_id: int,
+    choice_id: str = Query(..., description="Choice ID selected by the user"),
+    option_index: int = Query(0, description="Index of the selected option"),
+    custom_text: Optional[str] = Query(None, description="Custom user input text"),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Make a choice in a story session with SSE streaming for next chapter generation.
+
+    This endpoint:
+    1. Records the user's choice
+    2. Generates the next chapter with token-by-token streaming
+    3. Streams events in real-time (similar to initial story generation)
+
+    Use EventSource on the client side to consume the stream.
+    """
+    try:
+        session_service = StorySessionService(db)
+        child_service = ChildService(db)
+        story_service = StoryService(db)
+
+        # Get session and verify access
+        session = session_service.get_session_by_id(session_id)
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Story session not found"
+            )
+
+        if not child_service.check_child_access(session.child_id, current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied to this story session"
+            )
+
+        # Process the choice
+        # Check if this is a custom user input choice
+        custom_user_input = None
+        if choice_id == "custom-choice" and custom_text:
+            custom_user_input = custom_text.strip()
+
+        # Record the choice made (for context in next chapter generation)
+        if session:
+            # Convert string choice_id to integer if possible, otherwise use special handling
+            try:
+                choice_id_int = int(choice_id)
+                session.add_choice(choice_id_int, option_index or 0)
+            except ValueError:
+                # Handle special choice IDs like "continue" or "custom-choice"
+                if not session.choices_made:
+                    session.choices_made = []
+
+                choice_record = {
+                    "choice_id": choice_id,  # Keep as string for special choices
+                    "option_index": option_index or 0,
+                    "timestamp": datetime.utcnow().isoformat(),
+                }
+
+                # For custom choices, record the user's text as the chosen option
+                if choice_id == "custom-choice" and custom_text:
+                    choice_record["chosen_option"] = custom_text.strip()
+                    choice_record["question"] = "Custom user input"
+
+                session.choices_made.append(choice_record)
+
+            # Commit the choice to database
+            session_service.db.commit()
+
+        # Check if there are more chapters available
+        if session.current_chapter >= session.story.total_chapters:
+            # Story is complete - return a simple completion event
+            async def completion_stream():
+                import json
+
+                # Update session as completed
+                session.is_completed = True
+                session.completion_percentage = 100
+                session.completed_at = datetime.utcnow()
+                db.commit()
+
+                # Send completion event
+                event_data = {
+                    "success": True,
+                    "is_ending": True,
+                    "next_chapter": session.current_chapter,
+                    "completion_percentage": 100,
+                    "new_choices": []
+                }
+                yield f"event: complete\ndata: {json.dumps(event_data)}\n\n"
+
+            return StreamingResponse(
+                completion_stream(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                    "Connection": "keep-alive",
+                }
+            )
+
+        # Advance to the next chapter with streaming
+        next_chapter = session.current_chapter + 1
+
+        logger.info(f"Starting streaming next chapter generation for session: {session_id}, chapter: {next_chapter}")
+
+        # Return streaming response that generates next chapter
+        return StreamingResponse(
+            story_service.generate_personalized_story_stream(
+                child=session.child,
+                theme=session.story.themes[0] if session.story.themes else "adventure",
+                chapter_number=next_chapter,
+                story_session=session,
+                custom_user_input=custom_user_input
+            ),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+                "Connection": "keep-alive",
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error making story choice with streaming: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to make story choice with streaming"
+        )

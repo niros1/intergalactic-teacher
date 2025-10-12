@@ -41,21 +41,21 @@ export const useStoryRuntime = () => {
 
     try {
       setState(prev => ({ ...prev, isLoading: true }));
-      
+
       const sessionResponse = await startSession({
         storyId: currentStory.id,
         childId: currentChild.id.toString()
       });
 
       const sessionId = sessionResponse.session ? sessionResponse.session.id.toString() : (sessionResponse as any).id.toString();
-      
+
       // Create welcome message
       const welcomeMessage: StoryMessage = {
         id: 'welcome-1',
         role: 'assistant',
-        content: [{ 
-          type: 'text', 
-          text: currentChild.language_preference === 'hebrew' 
+        content: [{
+          type: 'text',
+          text: currentChild.language_preference === 'hebrew'
             ? `היי ${currentChild.name}! בואו נתחיל את הסיפור "${currentStory.title}"! מוכנים להרפתקה? 🌟`
             : `Hi ${currentChild.name}! Let's start the story "${currentStory.title}"! Ready for an adventure? 🌟`
         }],
@@ -103,7 +103,7 @@ export const useStoryRuntime = () => {
           };
           messagesToAdd.push(chapterMessage);
         }
-        
+
         // Add choices if available (only after the last chapter)
         if (currentStory.choices && currentStory.choices.length > 0) {
           // Get the contextual question from the first choice (they all have the same question)
@@ -165,12 +165,12 @@ export const useStoryRuntime = () => {
     if (!currentStory || !currentStory.content || currentStory.content.length === 0) return;
 
     // Combine all paragraphs into single chat message
-    const chapterText = Array.isArray(currentStory.content) 
+    const chapterText = Array.isArray(currentStory.content)
       ? currentStory.content.join('\n\n')
       : currentStory.content;
 
     const messageId = `chapter-${currentStory.currentChapter}-${Date.now()}`;
-    
+
     const chapterMessage: StoryMessage = {
       id: messageId,
       role: 'assistant',
@@ -191,10 +191,10 @@ export const useStoryRuntime = () => {
     if (currentStory.choices && currentStory.choices.length > 0) {
       setTimeout(() => {
         // Check if choices for this chapter are already in messages
-        const hasChoicesForCurrentChapter = state.messages.some(msg => 
+        const hasChoicesForCurrentChapter = state.messages.some(msg =>
           msg.metadata?.choices && msg.metadata?.chapterNumber === currentStory.currentChapter
         );
-        
+
         if (!hasChoicesForCurrentChapter) {
           sendChoiceOptions(currentStory.choices!);
         }
@@ -354,16 +354,16 @@ export const useStoryRuntime = () => {
 
           // Handle "start story" messages (yes, ready, continue, etc.)
           if (content.toLowerCase().includes('yes') ||
-              content.toLowerCase().includes('ready') ||
-              content.toLowerCase().includes('start') ||
-              content.toLowerCase().includes('begin') ||
-              content.toLowerCase().includes('continue') ||
-              content.toLowerCase().includes('next') ||
-              content.toLowerCase().includes('go') ||
-              content.toLowerCase().includes('כן') ||
-              content.toLowerCase().includes('מוכן') ||
-              content.toLowerCase().includes('התחל') ||
-              content.toLowerCase().includes('המשך')) {
+            content.toLowerCase().includes('ready') ||
+            content.toLowerCase().includes('start') ||
+            content.toLowerCase().includes('begin') ||
+            content.toLowerCase().includes('continue') ||
+            content.toLowerCase().includes('next') ||
+            content.toLowerCase().includes('go') ||
+            content.toLowerCase().includes('כן') ||
+            content.toLowerCase().includes('מוכן') ||
+            content.toLowerCase().includes('התחל') ||
+            content.toLowerCase().includes('המשך')) {
             sendCurrentChapter();
             return;
           }
@@ -395,22 +395,22 @@ export const useStoryRuntime = () => {
 
   // Watch for streaming content during story generation
   useEffect(() => {
-    console.log('🔄 Streaming useEffect triggered:', {
-      isStreaming: streamingState.isStreaming,
-      contentLength: streamingState.streamedContent?.length,
-      isInitialized: state.isInitialized
-    });
+    // console.log('🔄 Streaming useEffect triggered:', {
+    //   isStreaming: streamingState.isStreaming,
+    //   contentLength: streamingState.streamedContent?.length,
+    //   isInitialized: state.isInitialized
+    // });
 
     if (streamingState.isStreaming && streamingState.streamedContent && state.isInitialized) {
       // Find or create the streaming message
       const streamingMessageId = `streaming-${currentStory?.id || 'temp'}`;
       const existingMessageIndex = state.messages.findIndex(m => m.id === streamingMessageId);
 
-      console.log('📝 Updating streaming message:', {
-        messageId: streamingMessageId,
-        existingIndex: existingMessageIndex,
-        contentPreview: streamingState.streamedContent.substring(0, 50)
-      });
+      // console.log('📝 Updating streaming message:', {
+      //   messageId: streamingMessageId,
+      //   existingIndex: existingMessageIndex,
+      //   contentPreview: streamingState.streamedContent.substring(0, 50)
+      // });
 
       if (existingMessageIndex >= 0) {
         // Update existing streaming message
