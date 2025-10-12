@@ -531,9 +531,10 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
 
               case 'complete':
                 // Extract choices and chapter info from complete event
-                finalChoices = event.new_choices || event.data?.new_choices || []
-                nextChapter = event.next_chapter || event.data?.next_chapter || nextChapter
-                isEnding = event.is_ending || event.data?.is_ending || false
+                finalChoices = event.data?.choices || event.new_choices || event.data?.new_choices || []
+                nextChapter = event.data?.currentChapter || event.next_chapter || event.data?.next_chapter || nextChapter
+                isEnding = event.data?.isCompleted || event.is_ending || event.data?.is_ending || false
+                console.log('🎬 Complete event received:', { finalChoices, nextChapter, isEnding, eventData: event.data })
                 break
 
               case 'error':

@@ -46,7 +46,7 @@ class StoryCreate(BaseModel):
 class StoryResponse(StoryBase):
     """Schema for story response."""
     id: int
-    # content field removed - now using story_chapters
+    content: Union[str, List[str]] = []  # Can be string or list of paragraphs, populated from story_chapters
     target_age_min: int
     target_age_max: int
     estimated_reading_time: int
@@ -56,7 +56,7 @@ class StoryResponse(StoryBase):
     content_safety_score: float
     is_published: bool
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 

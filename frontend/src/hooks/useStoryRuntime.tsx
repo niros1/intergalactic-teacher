@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useStoryStore } from '../stores/storyStore';
 import { useChildStore } from '../stores/childStore';
 import type { Choice } from '../types';
@@ -395,11 +395,11 @@ export const useStoryRuntime = () => {
 
   // Watch for streaming content during story generation
   useEffect(() => {
-    // console.log('🔄 Streaming useEffect triggered:', {
-    //   isStreaming: streamingState.isStreaming,
-    //   contentLength: streamingState.streamedContent?.length,
-    //   isInitialized: state.isInitialized
-    // });
+    console.log('🔄 Streaming useEffect triggered:', {
+      isStreaming: streamingState.isStreaming,
+      contentLength: streamingState.streamedContent?.length,
+      isInitialized: state.isInitialized
+    });
 
     if (streamingState.isStreaming && streamingState.streamedContent && state.isInitialized) {
       // Find or create the streaming message
@@ -418,7 +418,11 @@ export const useStoryRuntime = () => {
           const newMessages = [...prev.messages];
           newMessages[existingMessageIndex] = {
             ...newMessages[existingMessageIndex],
-            content: [{ type: 'text', text: streamingState.streamedContent }]
+            content: [{ type: 'text', text: streamingState.streamedContent }],
+            metadata: {
+              ...newMessages[existingMessageIndex].metadata,
+              chapterNumber: currentStory?.currentChapter
+            }
           };
           return { ...prev, messages: newMessages };
         });
@@ -439,8 +443,33 @@ export const useStoryRuntime = () => {
           messages: [...prev.messages, streamingMessage]
         }));
       }
+    } else if (!streamingState.isStreaming && state.isInitialized) {
+      // When streaming stops, convert the streaming message to a permanent chapter message
+      const streamingMessageId = `streaming-${currentStory?.id || 'temp'}`;
+      const streamingMessageIndex = state.messages.findIndex(m => m.id === streamingMessageId);
+
+      if (streamingMessageIndex >= 0) {
+        // Convert the streaming message to a permanent chapter message
+        setState(prev => {
+          const newMessages = [...prev.messages];
+          const streamingMessage = newMessages[streamingMessageIndex];
+
+          // Replace streaming message with permanent chapter message
+          newMessages[streamingMessageIndex] = {
+            ...streamingMessage,
+            id: `chapter-${currentStory?.currentChapter}-${Date.now()}`,
+            metadata: {
+              ...streamingMessage.metadata,
+              storyId: currentStory?.id,
+              chapterNumber: currentStory?.currentChapter
+            }
+          };
+
+          return { ...prev, messages: newMessages };
+        });
+      }
     }
-  }, [streamingState.isStreaming, streamingState.streamedContent, state.isInitialized, state.messages, currentStory?.id, currentStory?.currentChapter]);
+  }, [streamingState.isStreaming, streamingState.streamedContent, state.isInitialized, currentStory?.id, currentStory?.currentChapter]);
 
   // Watch for story content changes (new chapters from backend)
   useEffect(() => {
@@ -453,7 +482,11 @@ export const useStoryRuntime = () => {
       const currentChapterInMessages = lastStoryMessage?.metadata?.chapterNumber || 0;
 
       // If we have a new chapter from backend that's not yet displayed, send it to chat
-      if (currentStory.currentChapter > currentChapterInMessages) {
+      // BUT: Don't send if chapters were already loaded during initialization
+      // (when content is an array, all chapters are loaded in initializeStory)
+      const chaptersLoadedDuringInit = Array.isArray(currentStory.content) && currentStory.content.length > 0;
+
+      if (currentStory.currentChapter > currentChapterInMessages && !chaptersLoadedDuringInit) {
         // Add a delay for better UX, especially for first chapter after welcome
         const delay = state.messages.length === 1 ? 1500 : 500; // Longer delay after welcome
         setTimeout(() => {
@@ -464,19 +497,41 @@ export const useStoryRuntime = () => {
   }, [currentStory?.currentChapter, currentStory?.content, state.sessionId, state.messages, state.isInitialized, sendCurrentChapter]);
 
   // Watch for choices after streaming completes
+  // Use a ref to track if we were previously streaming
+  const wasStreamingRef = useRef(false);
+
   useEffect(() => {
-    // When streaming stops and we have choices, add them to messages
-    if (!streamingState.isStreaming && currentStory?.choices && currentStory.choices.length > 0 && state.isInitialized) {
+    // Only add choices if we just finished streaming (transition from true to false)
+    const justFinishedStreaming = wasStreamingRef.current && !streamingState.isStreaming;
+    wasStreamingRef.current = streamingState.isStreaming;
+
+    console.log('🎯 Choices effect triggered:', {
+      justFinishedStreaming,
+      hasChoices: !!currentStory?.choices,
+      choicesCount: currentStory?.choices?.length,
+      currentChapter: currentStory?.currentChapter,
+      isInitialized: state.isInitialized
+    });
+
+    if (justFinishedStreaming && currentStory?.choices && currentStory.choices.length > 0 && state.isInitialized) {
       // Check if choices are already displayed for current chapter
       const hasChoicesForCurrentChapter = state.messages.some(msg =>
         msg.metadata?.choices && msg.metadata?.chapterNumber === currentStory.currentChapter
       );
 
+      console.log('💡 Streaming finished:', {
+        hasChoicesForCurrentChapter,
+        currentChapter: currentStory.currentChapter,
+        choices: currentStory.choices
+      });
+
       if (!hasChoicesForCurrentChapter) {
-        console.log('💡 Streaming finished - adding choices to messages:', currentStory.choices);
+        console.log('✅ Adding choices to messages');
         setTimeout(() => {
           sendChoiceOptions(currentStory.choices!);
         }, 500); // Small delay after streaming stops
+      } else {
+        console.log('⏭️ Choices already exist for this chapter');
       }
     }
   }, [streamingState.isStreaming, currentStory?.choices, currentStory?.currentChapter, state.isInitialized, state.messages, sendChoiceOptions]);
