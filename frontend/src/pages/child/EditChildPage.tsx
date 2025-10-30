@@ -44,8 +44,10 @@ const EditChildPage: React.FC = () => {
     { id: 'family', label: 'Family', emoji: '👨‍👩‍👧‍👦' },
   ]
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) {
+      e.preventDefault()
+    }
     clearError()
     setSuccessMessage('')
     
@@ -97,25 +99,33 @@ const EditChildPage: React.FC = () => {
 
   if (!currentChild) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="heading-child">Loading...</h1>
+      <div className="viewport-container">
+        <div className="viewport-content">
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center">
+              <h1 className="heading-child">Loading...</h1>
+            </div>
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center py-8">
-      <div className="card-child w-full max-w-2xl">
-        <div className="text-center mb-6">
-          <h1 className="heading-child">Edit Child Settings</h1>
-          <p className="text-child text-gray-600">
-            Update {currentChild.name}'s profile
-          </p>
-        </div>
+    <div className="viewport-container">
+      {/* Scrollable form content */}
+      <div className="viewport-content">
+        <div className="px-4 md:px-8 py-4 md:py-8">
+          <div className="max-w-2xl mx-auto pb-44 md:pb-48">
+          <div className="card-child w-full">
+            <div className="text-center mb-6">
+              <h1 className="heading-child">Edit Child Settings</h1>
+              <p className="text-child text-gray-600">
+                Update {currentChild.name}'s profile
+              </p>
+            </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label className="block text-child font-semibold text-gray-700 mb-2">
               Child's Name
@@ -212,21 +222,29 @@ const EditChildPage: React.FC = () => {
             )}
           </div>
 
-          {/* Success Message */}
-          {successMessage && (
-            <div className="bg-green-50 border-2 border-green-200 rounded-child p-4">
-              <p className="text-child text-green-600">✓ {successMessage}</p>
-            </div>
-          )}
+            </form>
 
-          {/* Error Message */}
-          {error && (
-            <div className="bg-red-50 border-2 border-red-200 rounded-child p-4">
-              <p className="text-child text-red-600">{error}</p>
-            </div>
-          )}
+            {/* Success Message */}
+            {successMessage && (
+              <div className="bg-green-50 border-2 border-green-200 rounded-child p-4 mt-6">
+                <p className="text-child text-green-600">✓ {successMessage}</p>
+              </div>
+            )}
 
-          {/* Buttons */}
+            {/* Error Message */}
+            {error && (
+              <div className="bg-red-50 border-2 border-red-200 rounded-child p-4 mt-6">
+                <p className="text-child text-red-600">{error}</p>
+              </div>
+            )}
+          </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Fixed Footer with Action Buttons */}
+      <div className="absolute bottom-0 left-0 right-0 bg-white border-t-2 border-gray-100 p-4 md:p-6 shadow-2xl">
+        <div className="max-w-2xl mx-auto">
           <div className="flex gap-4">
             <button
               type="button"
@@ -236,14 +254,15 @@ const EditChildPage: React.FC = () => {
               Cancel
             </button>
             <button
-              type="submit"
+              type="button"
+              onClick={handleSubmit}
               disabled={isLoading || formData.interests.length < 1}
               className="flex-1 btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   )
