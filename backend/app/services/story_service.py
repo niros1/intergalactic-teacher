@@ -238,6 +238,7 @@ class StoryService:
                 previous_chapters=previous_chapters,
                 previous_choices=previous_choices,
                 custom_user_input=custom_user_input,
+                welcome_message="",
                 story_content="",
                 choice_question="",
                 choices=[],
@@ -298,7 +299,9 @@ class StoryService:
                     # Handle different event types
                     if event_type == "on_chain_start":
                         # Node started
-                        if "generate_content" in event_name:
+                        if "generate_welcome" in event_name:
+                            yield format_node_event("generate_welcome", "started")
+                        elif "generate_content" in event_name:
                             yield format_node_event("generate_content", "started")
                         elif "safety_check" in event_name:
                             yield format_node_event("safety_check", "started")
@@ -309,7 +312,20 @@ class StoryService:
                         # Node completed - extract state updates
                         output = event_data.get("output", {})
 
-                        if "generate_content" in event_name:
+                        if "generate_welcome" in event_name:
+                            # Welcome message generation completed
+                            welcome_message = output.get("welcome_message", "")
+                            if welcome_message:
+                                final_state["welcome_message"] = welcome_message
+                                
+                                # Stream the welcome message as the first content
+                                yield format_content_chunk(welcome_message)
+                                await asyncio.sleep(0.1)  # Small pause after welcome
+                                logger.info(f"✅ Streamed welcome message: {welcome_message[:50]}...")
+                            
+                            yield format_node_event("generate_welcome", "completed")
+
+                        elif "generate_content" in event_name:
                             # Content generation completed
                             if "story_content" in output:
                                 content = output["story_content"]
@@ -537,6 +553,7 @@ class StoryService:
                     "id": str(story.id),  # Real database ID (integer)
                     "success": True,
                     "title": story.title,
+                    "welcome_message": final_state.get("welcome_message", ""),  # LLM-generated welcome
                     "content": clean_paragraphs,  # Array of clean paragraphs
                     "story_content": story_content,  # Keep for backward compatibility
                     "choices": choices_with_ids,  # Choices with real database IDs

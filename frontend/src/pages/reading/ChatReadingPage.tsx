@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStoryStore } from '../../stores/storyStore';
 import { useChildStore } from '../../stores/childStore';
@@ -9,10 +9,13 @@ const ChatReadingPage: React.FC = () => {
   const navigate = useNavigate();
   const { currentStory } = useStoryStore();
   const { currentChild } = useChildStore();
+  
+  // Always call hooks consistently - even if data is not ready
   const runtime = useStoryRuntime();
   const [inputValue, setInputValue] = useState('');
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
   
+  const speechRecognition = useSpeechRecognition();
   const {
     transcript,
     isListening,
@@ -21,7 +24,7 @@ const ChatReadingPage: React.FC = () => {
     stopListening,
     resetTranscript,
     error,
-  } = useSpeechRecognition();
+  } = speechRecognition;
 
   // Auto-fill input with transcript
   useEffect(() => {
@@ -39,6 +42,29 @@ const ChatReadingPage: React.FC = () => {
       }
     };
   }, []);
+
+  // Debug function to test Speech Synthesis API
+  const debugSpeechSynthesis = useCallback(() => {
+    console.log('=== Speech Synthesis Debug Info ===');
+    console.log('speechSynthesis supported:', 'speechSynthesis' in window);
+    console.log('speechSynthesis object:', window.speechSynthesis);
+    console.log('speechSynthesis.speaking:', window.speechSynthesis?.speaking);
+    console.log('speechSynthesis.pending:', window.speechSynthesis?.pending);
+    console.log('speechSynthesis.paused:', window.speechSynthesis?.paused);
+    
+    if ('speechSynthesis' in window) {
+      const voices = window.speechSynthesis.getVoices();
+      console.log('Available voices:', voices.length);
+      console.log('Hebrew voices:', voices.filter(v => v.lang.includes('he')));
+      console.log('English voices:', voices.filter(v => v.lang.includes('en')));
+    }
+    console.log('=== End Debug Info ===');
+  }, []);
+
+  // Run debug on component mount
+  useEffect(() => {
+    debugSpeechSynthesis();
+  }, [debugSpeechSynthesis]);
 
   // Check if we have the necessary data
   if (!currentStory || !currentChild) {
@@ -62,29 +88,6 @@ const ChatReadingPage: React.FC = () => {
   }
 
   const isHebrew = currentChild.language_preference === 'hebrew';
-
-  // Debug function to test Speech Synthesis API
-  const debugSpeechSynthesis = () => {
-    console.log('=== Speech Synthesis Debug Info ===');
-    console.log('speechSynthesis supported:', 'speechSynthesis' in window);
-    console.log('speechSynthesis object:', window.speechSynthesis);
-    console.log('speechSynthesis.speaking:', window.speechSynthesis?.speaking);
-    console.log('speechSynthesis.pending:', window.speechSynthesis?.pending);
-    console.log('speechSynthesis.paused:', window.speechSynthesis?.paused);
-    
-    if ('speechSynthesis' in window) {
-      const voices = window.speechSynthesis.getVoices();
-      console.log('Available voices:', voices.length);
-      console.log('Hebrew voices:', voices.filter(v => v.lang.includes('he')));
-      console.log('English voices:', voices.filter(v => v.lang.includes('en')));
-    }
-    console.log('=== End Debug Info ===');
-  };
-
-  // Run debug on component mount
-  useEffect(() => {
-    debugSpeechSynthesis();
-  }, []);
 
   const handleSendMessage = async () => {
     if (inputValue.trim() && runtime.append) {

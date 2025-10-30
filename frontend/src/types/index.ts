@@ -206,6 +206,8 @@ export interface GenerateStoryRequest {
   theme: Theme
   language: Language
   readingLevel?: ReadingLevel
+  title?: string
+  chapter_number?: number
   previousChoices?: ChoiceMade[]
   customPrompt?: string
 }
