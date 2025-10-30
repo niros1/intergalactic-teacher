@@ -573,11 +573,11 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
 
       setIsStreaming(false)
 
-      // Update story with streamed content
-      if (currentStory && accumulatedContent) {
+      // Update story with streamed content and/or chapter progression
+      if (currentStory) {
         const contentParagraphs = accumulatedContent
-          .split('\n\n')
-          .filter((p: string) => p.trim().length > 0)
+          ? accumulatedContent.split('\n\n').filter((p: string) => p.trim().length > 0)
+          : currentStory.content
 
         console.log('📝 Updating story after streaming:', {
           oldChapter: currentStory.currentChapter,
@@ -585,7 +585,8 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
           totalChapters: currentStory.totalChapters,
           choicesCount: finalChoices.length,
           isEnding,
-          shouldBeEnding: nextChapter >= (currentStory.totalChapters || 3)
+          shouldBeEnding: nextChapter >= (currentStory.totalChapters || 3),
+          hasContent: !!accumulatedContent
         })
 
         // Mark as completed if we've reached or exceeded the total chapters
