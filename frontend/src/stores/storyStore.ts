@@ -83,7 +83,7 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
     const { setIsStreaming, updateStreamingContent, updateStreamingProgress } = get()
 
     setIsStreaming(true)
-    set({ error: null, isGenerating: true })
+    set({ error: null, isGenerating: true }) // Don't clear currentStory immediately to prevent unmounting
 
     try {
       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
@@ -189,7 +189,7 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
                     // If inside story_content, accumulate only the actual story text
                     if (insideStoryContent) {
                       // Check for end of story_content (closing quote not preceded by backslash)
-                      if (char === '"' && (i === 0 || chunk[i-1] !== '\\')) {
+                      if (char === '"' && (i === 0 || chunk[i - 1] !== '\\')) {
                         insideStoryContent = false
                         jsonBuffer = ''
                         continue
@@ -243,7 +243,7 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
         // Build story from accumulated data
         finalStory = {
           id: Date.now().toString(),
-          title: request.title || `${request.theme} Adventure`,
+          title: request.title || `${request.theme.charAt(0).toUpperCase() + request.theme.slice(1)} Adventure`,
           content: accumulatedContent.split('\n\n').filter(p => p.trim()),
           language: 'english',
           readingLevel: 'beginner',
@@ -258,7 +258,7 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
 
       set(state => ({
         currentStory: finalStory,
-        stories: [finalStory!, ...state.stories],
+        stories: [finalStory!, ...state.stories.filter(s => s.id !== finalStory!.id)], // Replace if exists
         isGenerating: false,
       }))
 
@@ -277,13 +277,13 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
     set({ isGenerating: true, error: null })
     try {
       const newStory = await storyService.generateStory(request)
-      
+
       set(state => ({
         currentStory: newStory,
         stories: [newStory, ...state.stories],
         isGenerating: false
       }))
-      
+
       localStorage.setItem('currentStory', JSON.stringify(newStory))
       return newStory
     } catch (error) {
@@ -301,23 +301,23 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
     try {
       const response = await storyService.getStories(filters)
       console.log('LoadStories response:', response)
-      
+
       // Handle different response formats
       const stories = response.stories || response || []
-      
+
       // Ensure stories is an array
       if (!Array.isArray(stories)) {
         console.warn('Expected stories array but got:', stories)
         set({ stories: [], isLoading: false })
         return
       }
-      
+
       // Transform backend stories to frontend format
       const transformedStories = stories.map(story => ({
         ...story,
         id: story.id.toString(), // Ensure ID is string for frontend
-        content: Array.isArray(story.content) 
-          ? story.content 
+        content: Array.isArray(story.content)
+          ? story.content
           : [story.content || "Story content loading..."], // Convert string to array
         choices: story.choices || [], // Ensure choices array exists
         readingLevel: (story as any).difficulty_level || story.readingLevel,
@@ -329,7 +329,7 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
         theme: (story as any).themes?.[0] || story.theme || 'adventure', // Extract first theme
         createdAt: story.createdAt || (story as any).created_at
       }))
-      
+
       set({
         stories: transformedStories,
         isLoading: false
@@ -364,7 +364,7 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const sessionResponse = await storyService.startStorySession(request)
-      
+
       // Update current story if it's the one being started
       if (sessionResponse.story) {
         set({
@@ -375,7 +375,7 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
       } else {
         set({ isLoading: false })
       }
-      
+
       return sessionResponse
     } catch (error) {
       const errorMessage = getErrorMessage(error)
@@ -520,7 +520,7 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
                     // If inside story_content, accumulate only the actual story text
                     if (insideStoryContent) {
                       // Check for end of story_content (closing quote not preceded by backslash)
-                      if (char === '"' && (i === 0 || chunk[i-1] !== '\\')) {
+                      if (char === '"' && (i === 0 || chunk[i - 1] !== '\\')) {
                         insideStoryContent = false
                         jsonBuffer = ''
                         continue
@@ -637,7 +637,7 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const result = await storyService.completeSession(sessionId)
-      
+
       // Mark current story as completed if it matches
       const { currentStory } = get()
       if (currentStory) {
@@ -650,7 +650,7 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
       } else {
         set({ isLoading: false })
       }
-      
+
       return result
     } catch (error) {
       const errorMessage = getErrorMessage(error)
@@ -726,48 +726,48 @@ if (storedStory) {
 
 // Debug helper: Expose store to window for console access
 if (typeof window !== 'undefined') {
-  ;(window as any).storyStore = useStoryStore
-  ;(window as any).debugStory = {
-    getCurrentStory: () => useStoryStore.getState().currentStory,
-    getAllStories: () => useStoryStore.getState().stories,
-    getFullState: () => useStoryStore.getState(),
-    inspectCurrentStoryContent: () => {
-      const story = useStoryStore.getState().currentStory
-      if (story) {
-        console.log('📚 Current Story Debug Info:')
-        console.log('- Title:', story.title)
-        console.log('- Current Chapter:', story.currentChapter)
-        console.log('- Total Chapters:', story.totalChapters)
-        console.log('- Content:', story.content)
-        console.log('- Choices:', story.choices)
-        console.log('- Is Completed:', story.isCompleted)
-        console.log('- Full Story Object:', story)
-        return story
-      } else {
-        console.log('No current story found')
-        return null
+  ; (window as any).storyStore = useStoryStore
+    ; (window as any).debugStory = {
+      getCurrentStory: () => useStoryStore.getState().currentStory,
+      getAllStories: () => useStoryStore.getState().stories,
+      getFullState: () => useStoryStore.getState(),
+      inspectCurrentStoryContent: () => {
+        const story = useStoryStore.getState().currentStory
+        if (story) {
+          console.log('📚 Current Story Debug Info:')
+          console.log('- Title:', story.title)
+          console.log('- Current Chapter:', story.currentChapter)
+          console.log('- Total Chapters:', story.totalChapters)
+          console.log('- Content:', story.content)
+          console.log('- Choices:', story.choices)
+          console.log('- Is Completed:', story.isCompleted)
+          console.log('- Full Story Object:', story)
+          return story
+        } else {
+          console.log('No current story found')
+          return null
+        }
+      },
+      cleanCurrentStory: () => {
+        useStoryStore.getState().setCurrentStory(null)
+        localStorage.removeItem('currentStory')
+        console.log('✅ Current story cleared from store and localStorage')
+      },
+      cleanAllState: () => {
+        const { setCurrentStory, clearError } = useStoryStore.getState()
+        setCurrentStory(null)
+        clearError()
+        useStoryStore.setState({
+          stories: [],
+          isGenerating: false,
+          isLoading: false,
+          error: null
+        })
+        localStorage.removeItem('currentStory')
+        console.log('✅ All story state cleared (stories, current story, errors, loading states)')
+        console.log('⚠️  Note: This does not clear child store or session data')
       }
-    },
-    cleanCurrentStory: () => {
-      useStoryStore.getState().setCurrentStory(null)
-      localStorage.removeItem('currentStory')
-      console.log('✅ Current story cleared from store and localStorage')
-    },
-    cleanAllState: () => {
-      const { setCurrentStory, clearError } = useStoryStore.getState()
-      setCurrentStory(null)
-      clearError()
-      useStoryStore.setState({
-        stories: [],
-        isGenerating: false,
-        isLoading: false,
-        error: null
-      })
-      localStorage.removeItem('currentStory')
-      console.log('✅ All story state cleared (stories, current story, errors, loading states)')
-      console.log('⚠️  Note: This does not clear child store or session data')
     }
-  }
   // Debug helpers available on window.storyStore and window.debugStory
   // Available methods: getCurrentStory(), getAllStories(), getFullState(),
   // inspectCurrentStoryContent(), cleanCurrentStory(), cleanAllState()

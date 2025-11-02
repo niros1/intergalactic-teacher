@@ -55,6 +55,7 @@ class StoryGenerationState(TypedDict):
     custom_user_input: Optional[str]  # New field for custom user messages
 
     # Generated content
+    welcome_message: str
     story_content: str
     choice_question: str  # IMPORTANT: Contextual question from LLM
     choices: List[Dict[str, Any]]
@@ -281,6 +282,81 @@ def create_story_prompt_for_structured_output(state: StoryGenerationState) -> st
     ])
 
     return "\n".join(prompt_parts)
+
+
+def generate_welcome_message(state: StoryGenerationState) -> Dict[str, Any]:
+    """Generate a personalized welcome message using LLM."""
+    try:
+        prefs = state["child_preferences"]
+        theme = state["story_theme"]
+        child_name = prefs.get('name', 'friend')
+        child_age = prefs.get('age', 9)
+        language = prefs.get('language', 'english')
+        interests = prefs.get('interests', [])
+        
+        logger.info(f"Generating welcome message for {child_name}, theme: {theme}")
+        
+        # Initialize LLM
+        llm = ChatOllama(
+            model=settings.OLLAMA_MODEL,
+            base_url=settings.OLLAMA_BASE_URL,
+            temperature=0.7,  # More creative for welcomes
+            num_predict=150,  # Shorter for welcome messages
+        )
+        
+        # Create personalized welcome prompt
+        interests_text = f" who loves {', '.join(interests)}" if interests else ""
+        
+        if language == 'hebrew':
+            welcome_prompt = f"""Create a warm, enthusiastic welcome message in Hebrew for a {child_age}-year-old child named {child_name}{interests_text}.
+
+The message should:
+- Greet {child_name} personally in Hebrew
+- Express excitement about starting a {theme} story
+- Be age-appropriate and engaging
+- Be 1-2 sentences maximum
+- Include a relevant emoji
+- Match the {theme} theme naturally
+
+Write ONLY the welcome message in Hebrew, nothing else."""
+        else:
+            welcome_prompt = f"""Create a warm, enthusiastic welcome message for a {child_age}-year-old child named {child_name}{interests_text}.
+
+The message should:
+- Greet {child_name} personally 
+- Express excitement about starting a {theme} story/adventure
+- Be age-appropriate and engaging
+- Be 1-2 sentences maximum
+- Include a relevant emoji
+- Match the {theme} theme naturally (e.g., if it's animals, mention animals; if it's science, mention discoveries)
+
+Write ONLY the welcome message, nothing else."""
+
+        # Generate welcome message
+        response = llm.invoke([HumanMessage(content=welcome_prompt)])
+        welcome_text = response.content.strip()
+        
+        logger.info(f"Generated welcome message: {welcome_text[:100]}...")
+        
+        return {
+            "welcome_message": welcome_text,
+        }
+        
+    except Exception as e:
+        logger.error(f"Error generating welcome message: {e}")
+        # Fallback to simple message
+        child_name = state["child_preferences"].get('name', 'friend')
+        theme = state["story_theme"]
+        language = state["child_preferences"].get('language', 'english')
+        
+        if language == 'hebrew':
+            fallback = f"היי {child_name}! בואו נתחיל הרפתקה מדהימה! 🌟"
+        else:  
+            fallback = f"Hi {child_name}! Let's start an amazing {theme} adventure! 🌟"
+            
+        return {
+            "welcome_message": fallback,
+        }
 
 
 def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
@@ -595,6 +671,14 @@ def should_regenerate_content(state: StoryGenerationState) -> str:
     return "finalize"
 
 
+# Helper function to determine if we should generate welcome message
+def should_generate_welcome(state: StoryGenerationState) -> str:
+    """Determine if we should generate a welcome message (only for chapter 1)."""
+    if state["chapter_number"] == 1:
+        return "generate_welcome"
+    return "generate_content"
+
+
 # Create the workflow graph
 def create_story_generation_workflow():
     """Create the story generation workflow graph with LangSmith tracing."""
@@ -602,13 +686,15 @@ def create_story_generation_workflow():
     workflow = StateGraph(StoryGenerationState)
     
     # Add nodes
+    workflow.add_node("generate_welcome", generate_welcome_message)
     workflow.add_node("generate_content", generate_story_content)
     workflow.add_node("safety_check", check_content_safety) 
     workflow.add_node("enhance_content", enhance_content_if_needed)
     workflow.add_node("calculate_metrics", calculate_reading_metrics)
     
-    # Add edges
-    workflow.set_entry_point("generate_content")
+    # Add edges - always start with welcome message generation
+    workflow.set_entry_point("generate_welcome")
+    workflow.add_edge("generate_welcome", "generate_content")
     workflow.add_edge("generate_content", "safety_check")
     
     # Conditional routing based on safety check
