@@ -11,6 +11,7 @@ const EditChildPage: React.FC = () => {
     age: 7,
     language: 'english' as Language,
     interests: [] as string[],
+    preferred_chapters: 3,
   })
   const [successMessage, setSuccessMessage] = useState('')
 
@@ -28,6 +29,7 @@ const EditChildPage: React.FC = () => {
         age: currentChild.age,
         language: language as Language,
         interests: currentChild.interests || [],
+        preferred_chapters: (currentChild as any).preferred_chapters || 3,
       })
     } else {
       // If no current child, redirect to dashboard
@@ -62,6 +64,7 @@ const EditChildPage: React.FC = () => {
         age: formData.age,
         language_preference: formData.language, // Backend expects language_preference
         interests: formData.interests,
+        preferred_chapters: formData.preferred_chapters,
       }
       
       await updateChild(currentChild.id.toString(), updateData)
@@ -80,7 +83,7 @@ const EditChildPage: React.FC = () => {
     const { name, value } = e.target
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'age' ? parseInt(value) : value
+      [name]: name === 'age' || name === 'preferred_chapters' ? parseInt(value) : value
     }))
   }
 
@@ -158,6 +161,28 @@ const EditChildPage: React.FC = () => {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label className="block text-child font-semibold text-gray-700 mb-2">
+              Story Length (Number of Chapters)
+            </label>
+            <select
+              name="preferred_chapters"
+              value={formData.preferred_chapters}
+              onChange={handleChange}
+              className="w-full px-4 py-3 text-child border-2 border-gray-200 rounded-child focus:border-primary-500 focus:outline-none transition-colors"
+              required
+            >
+              {Array.from({ length: 10 }, (_, i) => i + 1).map(chapters => (
+                <option key={chapters} value={chapters}>
+                  {chapters} chapter{chapters > 1 ? 's' : ''} {chapters <= 2 ? '(Short)' : chapters <= 5 ? '(Medium)' : '(Long)'}
+                </option>
+              ))}
+            </select>
+            <p className="text-sm text-gray-500 mt-2">
+              Choose how many chapters you want in each story. Shorter stories are great for quick reading sessions!
+            </p>
           </div>
 
           <div>

@@ -1,0 +1,87 @@
+# Intergalactic Teacher - Interactive Reading Platform
+
+## Project Overview
+Educational web app creating personalized AI-powered stories for children 7-12 years old.
+Supports Hebrew and English with real-time streaming story generation.
+
+## Tech Stack
+- Backend: FastAPI, Python 3.11+, PostgreSQL, SQLAlchemy, LangGraph, Ollama
+- Frontend: React 18, TypeScript, Vite, Tailwind CSS, Zustand
+- Streaming: Server-Sent Events (SSE) for real-time content delivery
+
+## Key Architecture Patterns
+- Clean architecture: controllers → services → repositories → models
+- Streaming workflows using LangGraph with .astream_events()
+- JWT authentication with child profile access control
+- Type-safe APIs with Pydantic models
+
+## Code Standards
+- Use TypeScript strict mode everywhere
+- Async functions for all I/O operations
+- Comprehensive error handling with structured logging
+- SSE events must follow the format in `backend/app/utils/sse_formatter.py`
+- Frontend state management via Zustand stores
+- Component props should be properly typed interfaces
+
+## Current Focus Areas
+- Implementing token streaming for story generation
+- Building ChatGPT-like conversational interface
+- Ensuring child safety with content filtering
+- Performance optimization for concurrent users
+
+## Testing Requirements
+- Unit tests for all service methods
+- Integration tests for streaming workflows
+- E2E tests for complete user journeys
+- Performance tests for story generation speed
+
+## File Naming Conventions
+- React components: PascalCase (e.g., `StoryCard.tsx`)
+- Services: camelCase (e.g., `storyService.ts`)
+- Types: PascalCase interfaces (e.g., `interface StoryState`)
+- API endpoints: snake_case (e.g., `/api/v1/stories/generate`)
+- Database models: PascalCase classes (e.g., `class Story`)
+
+## Important Notes
+- Always validate child access permissions before story operations
+- Use structured logging with context (child_id, session_id, etc.)
+- Implement proper error boundaries in React components
+- Follow COPPA compliance guidelines for child data protection
+- Test Hebrew text rendering and RTL support thoroughly
+
+## Streaming Implementation Guidelines
+- Use SSE (Server-Sent Events) for real-time content delivery
+- Follow the event format: `{type, data}` structure
+- Handle connection errors gracefully with retry logic
+- Implement proper cleanup on component unmount
+- Use EventSource API on frontend for SSE consumption
+
+## Security Guidelines
+- Validate all user inputs, especially for children's safety
+- Implement content filtering at multiple levels
+- Use parameterized queries to prevent SQL injection
+- Store JWT tokens securely and implement proper refresh logic
+- Log security events for monitoring and audit trails
+
+## GitHub Project Management
+- **Repository**: https://github.com/niros1/intergalactic-teacher
+- **Project Board**: https://github.com/users/niros1/projects/2
+
+### Issue Management Guidelines
+- **For NEW work** (features, bugs, improvements): Create a GitHub issue and link it to the project board
+- **For EXISTING issues**: Work directly on the existing issue - do NOT create a new one
+- All issues should be properly categorized with appropriate labels
+- Link issues to the project board for tracking and organization
+- Include clear descriptions, acceptance criteria, and technical details in issues
+- Reference related issues and pull requests for better traceability
+
+### When Creating New Issues
+- Provide clear, descriptive titles
+- Include detailed descriptions with context and requirements
+- Add appropriate labels (feature, bug, enhancement, etc.)
+- Set priority levels when applicable
+- Link to the project board for tracking
+- Include technical specifications and implementation notes when relevant
+
+### When Start working on issue
+- Open a new branch with the issue number and issue title

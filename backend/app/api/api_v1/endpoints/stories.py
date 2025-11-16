@@ -231,7 +231,7 @@ async def generate_story(
             target_age_min=max(3, child.age - 2),
             target_age_max=min(18, child.age + 2),
             estimated_reading_time=result.get("estimated_reading_time", 5),
-            total_chapters=3,
+            total_chapters=child.preferred_chapters or 3,  # Use child's preferred chapters
             has_choices=len(result.get("choices", [])) > 0,
             generated_by_ai=True,
             content_safety_score=result.get("safety_score", 1.0),

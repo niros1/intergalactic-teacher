@@ -30,6 +30,7 @@ class Child(Base):
         Enum("beginner", "intermediate", "advanced", name="reading_level_enum"),
         default="beginner"
     )
+    preferred_chapters = Column(Integer, default=3)  # Number of chapters per story (1-10)
     
     # Interests (stored as JSON array)
     interests = Column(JSON, default=list)  # ["animals", "adventure", "fantasy", "science"]
@@ -69,6 +70,7 @@ class Child(Base):
             "reading_level": self.reading_level,
             "interests": self.interests or [],
             "vocabulary_level": self.reading_level_score,
+            "preferred_chapters": self.preferred_chapters or 3,
         }
     
     def update_reading_streak(self) -> None:

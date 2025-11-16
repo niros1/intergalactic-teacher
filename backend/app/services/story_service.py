@@ -238,6 +238,7 @@ class StoryService:
                 previous_chapters=previous_chapters,
                 previous_choices=previous_choices,
                 custom_user_input=custom_user_input,
+                welcome_message="",
                 story_content="",
                 choice_question="",
                 choices=[],
@@ -298,7 +299,9 @@ class StoryService:
                     # Handle different event types
                     if event_type == "on_chain_start":
                         # Node started
-                        if "generate_content" in event_name:
+                        if "generate_welcome" in event_name:
+                            yield format_node_event("generate_welcome", "started")
+                        elif "generate_content" in event_name:
                             yield format_node_event("generate_content", "started")
                         elif "safety_check" in event_name:
                             yield format_node_event("safety_check", "started")
@@ -309,7 +312,20 @@ class StoryService:
                         # Node completed - extract state updates
                         output = event_data.get("output", {})
 
-                        if "generate_content" in event_name:
+                        if "generate_welcome" in event_name:
+                            # Welcome message generation completed
+                            welcome_message = output.get("welcome_message", "")
+                            if welcome_message:
+                                final_state["welcome_message"] = welcome_message
+                                
+                                # Stream the welcome message as the first content
+                                yield format_content_chunk(welcome_message)
+                                await asyncio.sleep(0.1)  # Small pause after welcome
+                                logger.info(f"✅ Streamed welcome message: {welcome_message[:50]}...")
+                            
+                            yield format_node_event("generate_welcome", "completed")
+
+                        elif "generate_content" in event_name:
                             # Content generation completed
                             if "story_content" in output:
                                 content = output["story_content"]
@@ -441,7 +457,7 @@ class StoryService:
                     target_age_min=max(3, child.age - 2),
                     target_age_max=min(18, child.age + 2),
                     estimated_reading_time=final_state.get("estimated_reading_time", 5),
-                    total_chapters=3,
+                    total_chapters=child.preferred_chapters or 3,
                     has_choices=len(choices) > 0,
                     generated_by_ai=True,
                     content_safety_score=final_state.get("safety_score", 1.0),
@@ -537,6 +553,7 @@ class StoryService:
                     "id": str(story.id),  # Real database ID (integer)
                     "success": True,
                     "title": story.title,
+                    "welcome_message": final_state.get("welcome_message", ""),  # LLM-generated welcome
                     "content": clean_paragraphs,  # Array of clean paragraphs
                     "story_content": story_content,  # Keep for backward compatibility
                     "choices": choices_with_ids,  # Choices with real database IDs
@@ -574,10 +591,15 @@ class StoryService:
         child: Child,
         theme: str,
         title: str,
-        total_chapters: int = 3
+        total_chapters: Optional[int] = None
     ) -> Optional[Story]:
         """Create a new story with AI-generated content."""
         try:
+            # Use child's preferred chapters if not specified
+            if total_chapters is None:
+                total_chapters = child.preferred_chapters or 3
+                logger.info(f"Using child's preferred chapters: {total_chapters}")
+            
             # Generate the first chapter
             generation_result = self.generate_personalized_story(child, theme, 1, None, None)
             
