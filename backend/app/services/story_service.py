@@ -457,7 +457,7 @@ class StoryService:
                     target_age_min=max(3, child.age - 2),
                     target_age_max=min(18, child.age + 2),
                     estimated_reading_time=final_state.get("estimated_reading_time", 5),
-                    total_chapters=3,
+                    total_chapters=child.preferred_chapters or 3,
                     has_choices=len(choices) > 0,
                     generated_by_ai=True,
                     content_safety_score=final_state.get("safety_score", 1.0),
