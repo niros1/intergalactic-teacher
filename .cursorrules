@@ -82,3 +82,6 @@ Supports Hebrew and English with real-time streaming story generation.
 - Set priority levels when applicable
 - Link to the project board for tracking
 - Include technical specifications and implementation notes when relevant
+
+### When Start working on issue
+- Open a new branch with the issue number and issue title

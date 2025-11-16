@@ -17,6 +17,7 @@ class ChildBase(BaseModel):
     language_preference: str = "english"
     reading_level: str = "beginner"
     interests: List[str] = []
+    preferred_chapters: int = 3
     
     @field_validator('age')
     @classmethod
@@ -57,6 +58,14 @@ class ChildBase(BaseModel):
                 raise ValueError(f'Interest "{interest}" is not allowed. Allowed interests: {", ".join(allowed_interests)}')
         
         return v
+    
+    @field_validator('preferred_chapters')
+    @classmethod
+    def validate_preferred_chapters(cls, v):
+        """Validate preferred chapters count."""
+        if v < 1 or v > 10:
+            raise ValueError('Preferred chapters must be between 1 and 10')
+        return v
 
 
 class ChildCreate(ChildBase):
@@ -72,6 +81,7 @@ class ChildUpdate(BaseModel):
     reading_level: Optional[str] = None
     interests: Optional[List[str]] = None
     avatar_url: Optional[str] = None
+    preferred_chapters: Optional[int] = None
     
     @field_validator('age')
     @classmethod
@@ -95,6 +105,14 @@ class ChildUpdate(BaseModel):
         """Validate reading level if provided."""
         if v is not None and v not in ['beginner', 'intermediate', 'advanced']:
             raise ValueError('Reading level must be "beginner", "intermediate", or "advanced"')
+        return v
+    
+    @field_validator('preferred_chapters')
+    @classmethod
+    def validate_preferred_chapters(cls, v):
+        """Validate preferred chapters count if provided."""
+        if v is not None and (v < 1 or v > 10):
+            raise ValueError('Preferred chapters must be between 1 and 10')
         return v
 
 

@@ -19,6 +19,7 @@ export interface Child {
   reading_level: string
   language_preference: string
   interests: string[]
+  preferred_chapters: number
   avatar_url?: string
   total_stories_completed: number
   total_reading_time: number
@@ -154,6 +155,7 @@ export interface CreateChildRequest {
   reading_level: ReadingLevel
   language_preference: Language
   interests: string[]
+  preferred_chapters: number
   avatar_url?: string
 }
 
@@ -162,6 +164,7 @@ export interface UpdateChildRequest {
   age?: number
   language_preference?: Language
   interests?: string[]
+  preferred_chapters?: number
   avatar_url?: string
 }
 

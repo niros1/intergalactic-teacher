@@ -93,6 +93,9 @@ class ChildService:
             if child_update.avatar_url is not None:
                 child.avatar_url = child_update.avatar_url
             
+            if child_update.preferred_chapters is not None:
+                child.preferred_chapters = child_update.preferred_chapters
+            
             child.updated_at = datetime.utcnow()
             child.last_active = datetime.utcnow()
             

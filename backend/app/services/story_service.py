@@ -591,10 +591,15 @@ class StoryService:
         child: Child,
         theme: str,
         title: str,
-        total_chapters: int = 3
+        total_chapters: Optional[int] = None
     ) -> Optional[Story]:
         """Create a new story with AI-generated content."""
         try:
+            # Use child's preferred chapters if not specified
+            if total_chapters is None:
+                total_chapters = child.preferred_chapters or 3
+                logger.info(f"Using child's preferred chapters: {total_chapters}")
+            
             # Generate the first chapter
             generation_result = self.generate_personalized_story(child, theme, 1, None, None)
             
