@@ -12,6 +12,7 @@ from langgraph.graph import END, StateGraph
 # Removed unused LangSmith imports - tracing is handled automatically
 
 from app.core.config import settings
+from app.utils.text_beautifier import beautify_story_text
 
 logger = logging.getLogger(__name__)
 
@@ -660,6 +661,11 @@ def calculate_reading_metrics(state: StoryGenerationState) -> Dict[str, Any]:
 
     # Format the story content with paragraphs and emojis
     formatted_content = format_story_content(content, language)
+    
+    # Apply text beautification - add line breaks after each sentence
+    # This creates even more visual separation for easier reading
+    beautified_content = beautify_story_text(formatted_content, language)
+    logger.info(f"Applied text beautification - sentences separated by line breaks")
 
     # Estimate reading time based on word count and reading level
     word_count = len(content.split())
@@ -678,7 +684,7 @@ def calculate_reading_metrics(state: StoryGenerationState) -> Dict[str, Any]:
     vocabulary_level = reading_level
 
     return {
-        "story_content": formatted_content,  # Return formatted content
+        "story_content": beautified_content,  # Return beautified content with line breaks
         "estimated_reading_time": estimated_reading_time,
         "vocabulary_level": vocabulary_level,
     }
