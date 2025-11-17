@@ -1,0 +1,5 @@
+---
+alwaysApply: true
+---
+
+- When changing the backend use docker-compose restart api to restart the service

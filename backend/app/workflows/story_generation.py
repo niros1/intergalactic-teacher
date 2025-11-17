@@ -661,11 +661,6 @@ def calculate_reading_metrics(state: StoryGenerationState) -> Dict[str, Any]:
 
     # Format the story content with paragraphs and emojis
     formatted_content = format_story_content(content, language)
-    
-    # Apply text beautification - add line breaks after each sentence
-    # This creates even more visual separation for easier reading
-    beautified_content = beautify_story_text(formatted_content, language)
-    logger.info(f"Applied text beautification - sentences separated by line breaks")
 
     # Estimate reading time based on word count and reading level
     word_count = len(content.split())
@@ -684,9 +679,23 @@ def calculate_reading_metrics(state: StoryGenerationState) -> Dict[str, Any]:
     vocabulary_level = reading_level
 
     return {
-        "story_content": beautified_content,  # Return beautified content with line breaks
+        "story_content": formatted_content,  # Return formatted content (emojis added)
         "estimated_reading_time": estimated_reading_time,
         "vocabulary_level": vocabulary_level,
+    }
+
+
+def beautify_content(state: StoryGenerationState) -> Dict[str, Any]:
+    """Apply text beautification - add line breaks after each sentence for easier reading."""
+    content = state["story_content"]
+    language = state["child_preferences"].get("language", "english")
+    
+    # Apply text beautification - add line breaks after each sentence
+    beautified_content = beautify_story_text(content, language)
+    logger.info(f"✨ Beautification node: Applied line breaks after sentences - language: {language}")
+    
+    return {
+        "story_content": beautified_content,
     }
 
 
@@ -720,6 +729,7 @@ def create_story_generation_workflow():
     workflow.add_node("safety_check", check_content_safety) 
     workflow.add_node("enhance_content", enhance_content_if_needed)
     workflow.add_node("calculate_metrics", calculate_reading_metrics)
+    workflow.add_node("beautify_content", beautify_content)  # Dedicated beautification node
     
     # Add edges - always start with welcome message generation
     workflow.set_entry_point("generate_welcome")
@@ -738,7 +748,8 @@ def create_story_generation_workflow():
     )
     
     workflow.add_edge("enhance_content", "safety_check")  # Re-check after enhancement
-    workflow.add_edge("calculate_metrics", END)
+    workflow.add_edge("calculate_metrics", "beautify_content")  # Beautify after metrics
+    workflow.add_edge("beautify_content", END)  # End after beautification
     
     # Compile with checkpointer for better tracing
     compiled_workflow = workflow.compile()

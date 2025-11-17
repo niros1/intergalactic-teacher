@@ -307,6 +307,8 @@ class StoryService:
                             yield format_node_event("safety_check", "started")
                         elif "calculate_metrics" in event_name:
                             yield format_node_event("calculate_metrics", "started")
+                        elif "beautify_content" in event_name:
+                            yield format_node_event("beautify_content", "started")
 
                     elif event_type == "on_chain_end":
                         # Node completed - extract state updates
@@ -372,25 +374,15 @@ class StoryService:
 
                                 cleaned_content = cleaned_content.strip()
 
-                                # Store cleaned content
+                                # Store cleaned content - DO NOT STREAM YET
+                                # Content will be beautified by the beautify_content node, then streamed
                                 current_content.append(cleaned_content)
                                 final_state["story_content"] = cleaned_content
                                 final_state["choices"] = output.get("choices", [])
                                 final_state["choice_question"] = choice_question
 
-                                # Stream story_content AND choice_question naturally together
-                                # Split content by paragraphs for streaming
-                                paragraphs = cleaned_content.split("\n\n")
-                                for para in paragraphs:
-                                    if para.strip():
-                                        yield format_content_chunk(para.strip())
-                                        await asyncio.sleep(0.05)  # Small delay for streaming effect
-
-                                # Stream the choice_question as a natural continuation if it exists
-                                if choice_question:
-                                    # Add a small pause before the question
-                                    await asyncio.sleep(0.1)
-                                    yield format_content_chunk("\n\n" + choice_question)
+                                # NOTE: Content streaming moved to beautify_content completion
+                                # This ensures we stream the beautified version with line breaks
 
                                 # DON'T stream the choices array - that will be sent in the complete event
 
@@ -414,14 +406,19 @@ class StoryService:
                             yield format_node_event("safety_check", "completed")
 
                         elif "calculate_metrics" in event_name:
-                            # Metrics calculation completed
+                            # Metrics calculation completed (emojis added)
                             estimated_time = output.get("estimated_reading_time", 5)
                             vocab_level = output.get("vocabulary_level", "")
                             educational_elements = output.get("educational_elements", [])
+                            formatted_story_content = output.get("story_content", "")
 
                             final_state["estimated_reading_time"] = estimated_time
                             final_state["vocabulary_level"] = vocab_level
                             final_state["educational_elements"] = educational_elements
+                            
+                            # Update story_content with formatted version (emojis added)
+                            if formatted_story_content:
+                                final_state["story_content"] = formatted_story_content
 
                             yield format_metadata_event(
                                 estimated_reading_time=estimated_time,
@@ -429,6 +426,37 @@ class StoryService:
                                 educational_elements=educational_elements
                             )
                             yield format_node_event("calculate_metrics", "completed")
+
+                        elif "beautify_content" in event_name:
+                            # Beautification completed - line breaks added after each sentence
+                            logger.info(f"🔍 Beautify node event - output keys: {list(output.keys())}")
+                            beautified_story_content = output.get("story_content", "")
+                            choice_question = final_state.get("choice_question", "")
+                            
+                            logger.info(f"✨ Beautify content length: {len(beautified_story_content) if beautified_story_content else 0}")
+                            logger.info(f"✨ Beautify content preview: {beautified_story_content[:100] if beautified_story_content else 'EMPTY'}")
+                            
+                            if beautified_story_content:
+                                final_state["story_content"] = beautified_story_content
+                                logger.info("✨ Beautification node completed - streaming beautified content")
+                                
+                                # NOW stream the beautified content with line breaks!
+                                # Split by double newlines (paragraphs) for streaming
+                                paragraphs = beautified_story_content.split("\n\n")
+                                logger.info(f"📤 Streaming {len(paragraphs)} paragraphs")
+                                for para in paragraphs:
+                                    if para.strip():
+                                        yield format_content_chunk(para.strip())
+                                        await asyncio.sleep(0.05)  # Small delay for streaming effect
+                                
+                                # Stream the choice_question as a natural continuation if it exists
+                                if choice_question:
+                                    await asyncio.sleep(0.1)
+                                    yield format_content_chunk("\n\n" + choice_question)
+                            else:
+                                logger.warning("⚠️ Beautify node completed but no content found in output!")
+                            
+                            yield format_node_event("beautify_content", "completed")
 
                     elif event_type == "on_chat_model_stream":
                         # Token-level streaming from LLM
@@ -527,13 +555,14 @@ class StoryService:
                 logger.info(f"Story saved to database with ID: {story.id}")
 
                 # Clean up story content for frontend
+                # NOTE: Content is already beautified by the workflow's calculate_metrics node
                 import re
                 story_content_clean = re.sub(r'```json.*?```', '', story_content, flags=re.DOTALL)
                 story_content_clean = re.sub(r'Here is Chapter \d+ of the story:', '', story_content_clean)
                 story_content_clean = re.sub(r'Please let me know.*?continue.*?\.', '', story_content_clean, flags=re.IGNORECASE)
                 story_content_clean = story_content_clean.strip()
 
-                # Split into paragraphs
+                # Split into paragraphs (content already beautified with line breaks after sentences by workflow)
                 paragraphs = [p.strip() for p in story_content_clean.split('\n\n') if p.strip()]
                 clean_paragraphs = [p for p in paragraphs if not any(char in p for char in ['{', '}', '"story_content"', '```'])]
 
@@ -554,8 +583,8 @@ class StoryService:
                     "success": True,
                     "title": story.title,
                     "welcome_message": final_state.get("welcome_message", ""),  # LLM-generated welcome
-                    "content": clean_paragraphs,  # Array of clean paragraphs
-                    "story_content": story_content,  # Keep for backward compatibility
+                    "content": clean_paragraphs,  # Array of clean paragraphs (beautified by workflow)
+                    "story_content": story_content_clean,  # Beautified content from workflow
                     "choices": choices_with_ids,  # Choices with real database IDs
                     "choice_question": choice_question,
                     "language": story.language,
