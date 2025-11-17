@@ -1,0 +1,48 @@
+---
+alwaysApply: true
+---
+
+# Working with GitHub – Rules for Intergalactic Teacher
+
+## Core Tools & Repos
+
+- Use the GitHub CLI (`gh` command) for all GitHub interactions (issues, PRs, project boards)
+- **Main repository:** [niros1/intergalactic-teacher](https://github.com/niros1/intergalactic-teacher)
+- **Main project board:** [Project Board (niros1/intergalactic-teacher, project 2)](https://github.com/users/niros1/projects/2)
+
+---
+
+## Creating Issues
+
+- Always relate new issues to the main project (project 2), starting in the **Backlog**.
+- **Command example:**
+
+  ```bash
+  gh issue create --title "Your Issue Title" --body "Details here" --repo niros1/intergalactic-teacher \
+    --project 'https://github.com/users/niros1/projects/2' --label backlog
+  ```
+
+---
+
+## Working on Issues
+- when starting to work on issue create a branch first
+---
+## Project Workflows
+
+- Move issues to the relevant project columns/stages as work progresses (e.g., In Progress, Done).
+- Reference related issues and pull requests in commit messages and PRs for traceability.
+
+---
+
+## General Conventions
+
+- Keep issues up to date with their status and ensure they're linked to the appropriate project board items.
+- Always use appropriate labels (`bug`, `feature`, `enhancement`, etc.) for issues.
+
+---
+
+## Reference Links
+
+- [Project board](https://github.com/users/niros1/projects/2)
+- [Repository](https://github.com/niros1/intergalactic-teacher)
+

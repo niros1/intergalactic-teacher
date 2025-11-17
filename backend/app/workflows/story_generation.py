@@ -117,6 +117,17 @@ def create_story_prompt(state: StoryGenerationState) -> str:
         "- Use vocabulary appropriate for the reading level with 2-3 challenging words",
         "- Include diverse characters and positive values",
         "- Make it naturally flow as if told by a storyteller",
+        "",
+        "CHILD-FRIENDLY FORMATTING (CRITICAL):",
+        f"- Write in SHORT, SIMPLE sentences (aim for under 15 words per sentence)",
+        f"- Break the story into TINY paragraphs (2-3 sentences maximum per paragraph)",
+        f"- Use natural pauses between scenes and story beats",
+        f"- Add breathing room - separate paragraphs with blank lines in your mind",
+        f"- Keep it EASY to read and follow for young readers aged {prefs.get('age', 9)}",
+        f"- Each paragraph should be ONE complete thought or action",
+        f"- Example good paragraph: 'Luna looked up at the stars. They twinkled brightly. She smiled.'",
+        f"- Example BAD paragraph: Long run-on sentences with multiple ideas crammed together",
+        f"- Language: {prefs.get('language', 'english')} - Use clear, natural phrasing in this language",
     ]
     
     # Add enhanced context from previous chapters - OPTIMIZED FOR STORY CONTINUITY
@@ -225,6 +236,18 @@ def create_story_prompt_for_structured_output(state: StoryGenerationState) -> st
         "- Provide 2-4 meaningful choices that advance the story",
         "- IMPORTANT: Write PLAIN TEXT ONLY. Do NOT use HTML tags like <p>, <br>, <div>, etc.",
         "- Output pure story text without any markup or formatting tags",
+        "",
+        "CHILD-FRIENDLY FORMATTING (CRITICAL):",
+        "- Write in SHORT, SIMPLE sentences (aim for under 15 words per sentence)",
+        "- Break the story into TINY paragraphs (2-3 sentences maximum per paragraph)",
+        "- Use natural pauses between scenes and story beats",
+        "- Add breathing room - separate paragraphs with blank lines in your mind",
+        "- Keep it EASY to read and follow for young readers",
+        "- Think: 'Would a {}-year-old find this easy to follow?'".format(prefs.get('age', 9)),
+        "- Each paragraph should be ONE complete thought or action",
+        "- Example good paragraph: 'Luna looked up at the stars. They twinkled brightly. She smiled.'",
+        "- Example BAD paragraph: Long run-on sentences with multiple ideas crammed together",
+        "- Language: {} - Use clear, natural phrasing in this language".format(prefs.get('language', 'english')),
     ]
     
     # Add enhanced context from previous chapters
