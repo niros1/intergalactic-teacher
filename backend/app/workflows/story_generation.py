@@ -724,6 +724,7 @@ def create_story_generation_workflow():
     workflow = StateGraph(StoryGenerationState)
     
     # Add nodes
+    workflow.add_node("check_chapter", lambda state: state)  # Passthrough node for routing
     workflow.add_node("generate_welcome", generate_welcome_message)
     workflow.add_node("generate_content", generate_story_content)
     workflow.add_node("safety_check", check_content_safety) 
@@ -731,8 +732,16 @@ def create_story_generation_workflow():
     workflow.add_node("calculate_metrics", calculate_reading_metrics)
     workflow.add_node("beautify_content", beautify_content)  # Dedicated beautification node
     
-    # Add edges - always start with welcome message generation
-    workflow.set_entry_point("generate_welcome")
+    # Add edges - conditionally generate welcome message only for chapter 1
+    workflow.set_entry_point("check_chapter")
+    workflow.add_conditional_edges(
+        "check_chapter",
+        should_generate_welcome,
+        {
+            "generate_welcome": "generate_welcome",
+            "generate_content": "generate_content",
+        }
+    )
     workflow.add_edge("generate_welcome", "generate_content")
     workflow.add_edge("generate_content", "safety_check")
     

@@ -125,9 +125,6 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
       let accumulatedContent = ''
       let finalStory: Story | null = null
       let buffer = ''
-      let jsonBuffer = '' // Buffer to accumulate JSON tokens
-      let insideStoryContent = false // Track if we're inside story_content field
-      let braceDepth = 0 // Track JSON depth
 
       while (true) {
         const { done, value } = await reader.read()
@@ -158,6 +155,7 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
 
           try {
             const event = JSON.parse(dataLine)
+            console.log('📥 SSE Event received:', event.type, event)
 
             switch (event.type) {
               case 'progress':
@@ -171,36 +169,11 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
                 if (event.data && event.data.chunk) {
                   const chunk = event.data.chunk
 
-                  // Filter JSON structure - only show story_content value
-                  for (let i = 0; i < chunk.length; i++) {
-                    const char = chunk[i]
-                    jsonBuffer += char
-
-                    if (char === '{') braceDepth++
-                    if (char === '}') braceDepth--
-
-                    // Check if we're entering story_content field
-                    if (jsonBuffer.endsWith('"story_content": "')) {
-                      insideStoryContent = true
-                      jsonBuffer = '' // Clear buffer, we're inside the content now
-                      continue
-                    }
-
-                    // If inside story_content, accumulate only the actual story text
-                    if (insideStoryContent) {
-                      // Check for end of story_content (closing quote not preceded by backslash)
-                      if (char === '"' && (i === 0 || chunk[i - 1] !== '\\')) {
-                        insideStoryContent = false
-                        jsonBuffer = ''
-                        continue
-                      }
-
-                      // Accumulate story content
-                      accumulatedContent += char
-                      updateStreamingContent(accumulatedContent)
-                      onChunk?.(char)
-                    }
-                  }
+                  // Backend now sends clean chunks directly (beautified with line breaks and emojis)
+                  // No need to parse JSON - just accumulate the content
+                  accumulatedContent += chunk
+                  updateStreamingContent(accumulatedContent)
+                  onChunk?.(chunk)
                 }
                 break
 
@@ -210,6 +183,7 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
 
               case 'complete':
                 // The complete event now includes the full story object with real database ID
+                console.log('✅ Complete event received, event.data:', event.data)
                 if (event.data) {
                   const storyData = event.data
                   finalStory = {
@@ -225,6 +199,7 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
                     totalChapters: storyData.totalChapters || 3,
                     createdAt: storyData.createdAt || new Date().toISOString(),
                   }
+                  console.log('✅ Final story set with ID:', finalStory.id)
                 }
                 break
 
@@ -241,6 +216,7 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
 
       if (!finalStory) {
         // Build story from accumulated data
+        console.warn('⚠️ No complete event received - creating fallback story with timestamp ID')
         finalStory = {
           id: Date.now().toString(),
           title: request.title || `${request.theme.charAt(0).toUpperCase() + request.theme.slice(1)} Adventure`,
@@ -254,6 +230,7 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
           totalChapters: 3,
           createdAt: new Date().toISOString(),
         }
+        console.log('⚠️ Fallback story created with ID:', finalStory.id)
       }
 
       set(state => ({
@@ -443,9 +420,6 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
 
       let accumulatedContent = ''
       let buffer = ''
-      let jsonBuffer = ''
-      let insideStoryContent = false
-      let braceDepth = 0
       let finalChoices: any[] = []
       // When making a choice, we're generating the NEXT chapter
       // But don't exceed totalChapters
@@ -502,35 +476,10 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
                 if (event.data && event.data.chunk) {
                   const chunk = event.data.chunk
 
-                  // Same JSON filtering logic as generateStoryStreaming
-                  for (let i = 0; i < chunk.length; i++) {
-                    const char = chunk[i]
-                    jsonBuffer += char
-
-                    if (char === '{') braceDepth++
-                    if (char === '}') braceDepth--
-
-                    // Check if we're entering story_content field
-                    if (jsonBuffer.endsWith('"story_content": "')) {
-                      insideStoryContent = true
-                      jsonBuffer = ''
-                      continue
-                    }
-
-                    // If inside story_content, accumulate only the actual story text
-                    if (insideStoryContent) {
-                      // Check for end of story_content (closing quote not preceded by backslash)
-                      if (char === '"' && (i === 0 || chunk[i - 1] !== '\\')) {
-                        insideStoryContent = false
-                        jsonBuffer = ''
-                        continue
-                      }
-
-                      // Accumulate story content
-                      accumulatedContent += char
-                      updateStreamingContent(accumulatedContent)
-                    }
-                  }
+                  // Backend now sends clean chunks directly (beautified with line breaks and emojis)
+                  // No need to parse JSON - just accumulate the content
+                  accumulatedContent += chunk
+                  updateStreamingContent(accumulatedContent)
                 }
                 break
 

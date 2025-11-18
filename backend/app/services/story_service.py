@@ -299,7 +299,10 @@ class StoryService:
                     # Handle different event types
                     if event_type == "on_chain_start":
                         # Node started
-                        if "generate_welcome" in event_name:
+                        if "check_chapter" in event_name:
+                            # Skip logging for check_chapter - it's just routing logic
+                            pass
+                        elif "generate_welcome" in event_name:
                             yield format_node_event("generate_welcome", "started")
                         elif "generate_content" in event_name:
                             yield format_node_event("generate_content", "started")
@@ -313,8 +316,16 @@ class StoryService:
                     elif event_type == "on_chain_end":
                         # Node completed - extract state updates
                         output = event_data.get("output", {})
+                        
+                        # Handle routing nodes that return strings instead of dicts
+                        if isinstance(output, str):
+                            # This is a routing decision, not state - skip it
+                            continue
 
-                        if "generate_welcome" in event_name:
+                        if "check_chapter" in event_name:
+                            # Skip - this is just routing logic
+                            pass
+                        elif "generate_welcome" in event_name:
                             # Welcome message generation completed
                             welcome_message = output.get("welcome_message", "")
                             if welcome_message:
@@ -438,35 +449,44 @@ class StoryService:
                             
                             if beautified_story_content:
                                 final_state["story_content"] = beautified_story_content
-                                logger.info("✨ Beautification node completed - streaming beautified content")
+                                logger.info("✨ Beautification node completed - streaming word-by-word for smooth experience")
                                 
-                                # NOW stream the beautified content with line breaks!
-                                # Split by double newlines (paragraphs) for streaming
-                                paragraphs = beautified_story_content.split("\n\n")
-                                logger.info(f"📤 Streaming {len(paragraphs)} paragraphs")
-                                for para in paragraphs:
-                                    if para.strip():
-                                        yield format_content_chunk(para.strip())
-                                        await asyncio.sleep(0.05)  # Small delay for streaming effect
+                                # Stream word-by-word for ChatGPT-like experience
+                                # This preserves line breaks and emojis while providing smooth streaming
+                                words = []
+                                current_word = ""
                                 
-                                # Stream the choice_question as a natural continuation if it exists
-                                if choice_question:
-                                    await asyncio.sleep(0.1)
-                                    yield format_content_chunk("\n\n" + choice_question)
+                                for char in beautified_story_content:
+                                    if char in [' ', '\n']:
+                                        if current_word:
+                                            words.append(current_word)
+                                            current_word = ""
+                                        words.append(char)  # Preserve spaces and line breaks
+                                    else:
+                                        current_word += char
+                                
+                                if current_word:
+                                    words.append(current_word)
+                                
+                                logger.info(f"📤 Streaming {len(words)} words/tokens")
+                                
+                                # Stream each word with a small delay
+                                for word in words:
+                                    yield format_content_chunk(word)
+                                    await asyncio.sleep(0.03)  # 30ms delay for smooth streaming
+                                
+                                # DON'T stream the choice_question - it will be displayed by the choices component
+                                # to avoid duplication
                             else:
                                 logger.warning("⚠️ Beautify node completed but no content found in output!")
                             
                             yield format_node_event("beautify_content", "completed")
 
                     elif event_type == "on_chat_model_stream":
-                        # Token-level streaming from LLM
-                        chunk = event_data.get("chunk")
-                        if chunk and hasattr(chunk, "content") and chunk.content:
-                            token = chunk.content
-
-                            # Stream tokens directly - we'll handle JSON structure on frontend
-                            # or wait for complete response
-                            yield format_content_chunk(token)
+                        # Token-level streaming from LLM - SKIP during content generation
+                        # The LLM outputs JSON structure which we don't want to show
+                        # We'll stream the beautified content later for a clean experience
+                        pass
 
                 # Workflow completed - NOW SAVE TO DATABASE
                 logger.info("Streaming story generation completed successfully - saving to database")
