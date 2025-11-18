@@ -329,11 +329,17 @@ class StoryService:
                             # Welcome message generation completed
                             welcome_message = output.get("welcome_message", "")
                             if welcome_message:
+                                # Clean up welcome message - remove surrounding quotes
+                                welcome_message = welcome_message.strip().strip('"').strip("'")
                                 final_state["welcome_message"] = welcome_message
                                 
                                 # Stream the welcome message as the first content
                                 yield format_content_chunk(welcome_message)
                                 await asyncio.sleep(0.1)  # Small pause after welcome
+                                
+                                # Add two line breaks after welcome message before story content
+                                yield format_content_chunk("\n\n")
+                                
                                 logger.info(f"✅ Streamed welcome message: {welcome_message[:50]}...")
                             
                             yield format_node_event("generate_welcome", "completed")
