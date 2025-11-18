@@ -73,20 +73,46 @@ class StoryGenerationState(TypedDict):
 
 
 def create_story_summary(chapter_content: str, chapter_num: int = 0) -> str:
-    """Create a structured summary of a chapter focusing on key story elements."""
-    # Extract key information (simplified approach - could be enhanced with LLM summarization)
-    words = chapter_content.split()
+    """Create a structured summary of a chapter using LLM for better context preservation."""
+    # For very short chapters, return as-is
+    if len(chapter_content) <= 200:
+        return chapter_content
     
-    # Take first and last portions to capture beginning and end events
-    if len(words) <= 100:
-        summary = chapter_content
-    else:
-        # Take first 60 words and last 40 words for beginning/end context
-        beginning = ' '.join(words[:60])
-        ending = ' '.join(words[-40:])
-        summary = f"{beginning}... {ending}"
-    
-    return summary[:400]  # Limit to 400 chars for consistency
+    try:
+        # Use LLM to create a meaningful summary
+        llm = ChatOllama(
+            model=settings.OLLAMA_MODEL,
+            base_url=settings.OLLAMA_BASE_URL,
+            temperature=0.3,  # Lower temp for consistent summarization
+            num_predict=150,  # Concise summary
+        )
+        
+        summary_prompt = f"""Summarize this story chapter in 2-3 sentences. Focus on:
+- Main characters and their actions
+- Key events and plot developments
+- Important details that affect the story progression
+
+Chapter {chapter_num}:
+{chapter_content}
+
+Provide a concise summary (2-3 sentences):"""
+
+        response = llm.invoke([HumanMessage(content=summary_prompt)])
+        summary = response.content.strip()
+        
+        logger.info(f"✨ Created LLM summary for chapter {chapter_num}: {summary[:80]}...")
+        return summary
+        
+    except Exception as e:
+        logger.error(f"Error creating LLM summary for chapter {chapter_num}: {e}")
+        # Fallback to basic truncation
+        words = chapter_content.split()
+        if len(words) <= 100:
+            return chapter_content
+        else:
+            beginning = ' '.join(words[:60])
+            ending = ' '.join(words[-40:])
+            return f"{beginning}... {ending}"[:400]
 
 
 # JSON formatting helper functions removed - no longer needed with structured output
@@ -114,9 +140,12 @@ def create_story_prompt(state: StoryGenerationState) -> str:
         "WRITING STYLE:",
         "- Write in direct storytelling voice (no meta-commentary like 'Here is Chapter X' or 'story_content:')",
         "- Start immediately with the story content",
-        "- Write 3-5 engaging paragraphs",
+        "- Write 8-12 engaging paragraphs to create a substantial chapter",
+        "- Aim for approximately 150-200 words total for a satisfying reading experience",
         "- Use vocabulary appropriate for the reading level with 2-3 challenging words",
-        "- Include diverse characters and positive values",
+        "- Include diverse characters and positive values (varied names, backgrounds, personalities)",
+        "- Be creative with character names - avoid repeating the same names in different stories",
+        "- Vary settings and scenarios within the theme (not every adventure needs to be in a forest!)",
         "- Make it naturally flow as if told by a storyteller",
         "",
         "CHILD-FRIENDLY FORMATTING (CRITICAL):",
@@ -126,7 +155,7 @@ def create_story_prompt(state: StoryGenerationState) -> str:
         f"- Add breathing room - separate paragraphs with blank lines in your mind",
         f"- Keep it EASY to read and follow for young readers aged {prefs.get('age', 9)}",
         f"- Each paragraph should be ONE complete thought or action",
-        f"- Example good paragraph: 'Luna looked up at the stars. They twinkled brightly. She smiled.'",
+        f"- Example good paragraph: 'The hero looked around. Birds were singing. It was a beautiful day.'",
         f"- Example BAD paragraph: Long run-on sentences with multiple ideas crammed together",
         f"- Language: {prefs.get('language', 'english')} - Use clear, natural phrasing in this language",
     ]
@@ -226,10 +255,13 @@ def create_story_prompt_for_structured_output(state: StoryGenerationState) -> st
         f"- Vocabulary Level: {prefs.get('vocabulary_level', 50)}/100",
         "",
         "STORY REQUIREMENTS:",
-        "- Write 3-5 engaging paragraphs for story_content",
+        "- Write 8-12 engaging paragraphs for story_content to create a substantial chapter",
+        "- Aim for approximately 150-200 words total for a satisfying reading experience",
         "- Start immediately with the story (no meta-commentary)",
         "- Use vocabulary appropriate for the reading level with 2-3 challenging words",
-        "- Include diverse characters and positive values",
+        "- Include diverse characters and positive values (varied names, backgrounds, personalities)",
+        "- Be creative with character names - avoid repeating the same names in different stories",
+        "- Vary settings and scenarios within the theme (not every adventure needs to be in a forest!)",
         "- Create a personalized choice_question that relates to the current story situation",
         "  * Use character names from the story (e.g., 'What should Sarah do next?')",
         "  * Make it specific to the situation (e.g., 'How will they cross the river?')",
@@ -246,7 +278,7 @@ def create_story_prompt_for_structured_output(state: StoryGenerationState) -> st
         "- Keep it EASY to read and follow for young readers",
         "- Think: 'Would a {}-year-old find this easy to follow?'".format(prefs.get('age', 9)),
         "- Each paragraph should be ONE complete thought or action",
-        "- Example good paragraph: 'Luna looked up at the stars. They twinkled brightly. She smiled.'",
+        "- Example good paragraph: 'The hero looked around. Birds were singing. It was a beautiful day.'",
         "- Example BAD paragraph: Long run-on sentences with multiple ideas crammed together",
         "- Language: {} - Use clear, natural phrasing in this language".format(prefs.get('language', 'english')),
     ]
