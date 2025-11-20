@@ -186,10 +186,17 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
                 console.log('✅ Complete event received, event.data:', event.data)
                 if (event.data) {
                   const storyData = event.data
+
+                  // IMPORTANT: Use accumulated content if available (includes welcome message + story)
+                  // Otherwise fall back to backend's content array
+                  const displayContent = accumulatedContent
+                    ? accumulatedContent.split('\n\n').filter(p => p.trim())
+                    : (storyData.content || [])
+
                   finalStory = {
                     id: storyData.id,  // Real database ID from backend
                     title: storyData.title,
-                    content: storyData.content || [],  // Array of paragraphs
+                    content: displayContent,  // Use streamed content (preserves welcome message)
                     language: storyData.language || 'english',
                     readingLevel: storyData.readingLevel || 'beginner',
                     theme: storyData.theme,
@@ -199,7 +206,7 @@ export const useStoryStore = create<StoryStore>((set, get) => ({
                     totalChapters: storyData.totalChapters || 3,
                     createdAt: storyData.createdAt || new Date().toISOString(),
                   }
-                  console.log('✅ Final story set with ID:', finalStory.id)
+                  console.log('✅ Final story set with ID:', finalStory.id, 'with', displayContent.length, 'paragraphs')
                 }
                 break
 

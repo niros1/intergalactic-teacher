@@ -52,21 +52,22 @@ class StoryService:
                     StoryChapter.chapter_number < chapter_number
                 ).order_by(StoryChapter.chapter_number).all()
                 
-                # Extract chapter content with better context management
+                # Extract chapter summaries for context
+                # All chapters should have summaries (generated after creation)
                 previous_chapters = []
                 for chapter_record in previous_chapter_records:
-                    # Clean and prepare chapter content for context
-                    content = chapter_record.content.strip()
-                    if content:
-                        # Ensure content is readable and not too fragmented
-                        previous_chapters.append(content)
+                    if chapter_record.summary:
+                        previous_chapters.append(f"Chapter {chapter_record.chapter_number} Summary: {chapter_record.summary}")
+                    else:
+                        # This shouldn't happen in normal flow - log a warning
+                        logger.warning(f"⚠️ Chapter {chapter_record.chapter_number} missing summary - this shouldn't happen!")
                 
                 logger.info(f"✅ Found {len(previous_chapter_records)} previous chapters for story continuity")
                 
                 # Log context info for debugging
                 if previous_chapters:
                     total_context_chars = sum(len(ch) for ch in previous_chapters)
-                    logger.info(f"Providing {len(previous_chapters)} previous chapters, {total_context_chars} total chars for story continuity")
+                    logger.info(f"Providing {len(previous_chapters)} previous chapters/summaries, {total_context_chars} total chars for story continuity")
                 
                 # Get ONLY the last choice made (for the previous chapter) for context
                 # Don't accumulate all choices from all chapters
@@ -521,12 +522,18 @@ class StoryService:
                 self.db.add(story)
                 self.db.flush()  # Get the story ID
 
+                # Generate summary for this chapter for future story continuity
+                from app.workflows.story_generation import create_story_summary
+                chapter_summary = create_story_summary(story_content, chapter_number)
+                logger.info(f"✨ Generated summary for chapter {chapter_number}: {chapter_summary[:80]}...")
+                
                 # Create StoryChapter record for the generated content
                 chapter = StoryChapter(
                     story_id=story.id,
                     chapter_number=chapter_number,
                     title=f"Chapter {chapter_number}",
                     content=story_content,
+                    summary=chapter_summary,  # Save summary for future use
                     is_ending=False,
                     is_published=True,
                     estimated_reading_time=final_state.get("estimated_reading_time", 5),
@@ -586,6 +593,20 @@ class StoryService:
                 story_content_clean = re.sub(r'```json.*?```', '', story_content, flags=re.DOTALL)
                 story_content_clean = re.sub(r'Here is Chapter \d+ of the story:', '', story_content_clean)
                 story_content_clean = re.sub(r'Please let me know.*?continue.*?\.', '', story_content_clean, flags=re.IGNORECASE)
+                
+                # Remove choice question and JSON structure that LLM might include in story_content
+                # Pattern 1: Remove "Should they:" or similar questions followed by JSON choices
+                story_content_clean = re.sub(r'(Should|What should|How should|Where should|When should|Why should)[^:]*:\s*\{[^}]*\}(\s*\{[^}]*\})*', '', story_content_clean, flags=re.IGNORECASE)
+                
+                # Pattern 2: Remove any remaining JSON objects with "text" and "description" keys
+                story_content_clean = re.sub(r'\{\s*"text"\s*:\s*"[^"]*"\s*,\s*"description"\s*:\s*"[^"]*"\s*\}', '', story_content_clean)
+                
+                # Pattern 3: Remove meta-text about choices
+                story_content_clean = re.sub(r'Here are (your|the) choices?:.*?[\{\[]', '', story_content_clean, flags=re.IGNORECASE)
+                story_content_clean = re.sub(r'choices?:?\s*[\{\[]', '', story_content_clean, flags=re.IGNORECASE)
+                
+                # Clean up any extra whitespace left behind
+                story_content_clean = re.sub(r'\n{3,}', '\n\n', story_content_clean)
                 story_content_clean = story_content_clean.strip()
 
                 # Split into paragraphs (content already beautified with line breaks after sentences by workflow)

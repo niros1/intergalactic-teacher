@@ -21,6 +21,7 @@ class StoryChapter(Base):
     chapter_number = Column(Integer, nullable=False)
     title = Column(String, nullable=True)  # Optional chapter title
     content = Column(Text, nullable=False)  # Chapter content
+    summary = Column(Text, nullable=True)  # AI-generated summary for story continuity
     
     # Generation metadata
     created_from_choice_id = Column(Integer, ForeignKey("choices.id"), nullable=True)

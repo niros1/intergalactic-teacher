@@ -35,6 +35,64 @@ export const useStoryRuntime = () => {
     usedChoiceMessageIds: new Set(),
   });
 
+  // Track current story ID to detect story changes
+  const [currentStoryId, setCurrentStoryId] = useState<string | null>(null);
+
+  // Reset session when story changes
+  useEffect(() => {
+    if (currentStory && currentStory.id !== currentStoryId) {
+      console.log('🔄 Story changed - resetting session', { oldId: currentStoryId, newId: currentStory.id });
+      setState({
+        messages: [],
+        isLoading: false,
+        sessionId: null,
+        isInitialized: false,
+        usedChoiceMessageIds: new Set(),
+      });
+      setCurrentStoryId(currentStory.id);
+    }
+  }, [currentStory, currentStoryId]);
+
+  // Add choices to the last message after streaming completes
+  useEffect(() => {
+    // Skip if no story, not initialized yet, or still streaming
+    if (!currentStory || !state.isInitialized || streamingState.isStreaming) return;
+
+    // Skip if no choices
+    if (!currentStory.choices || currentStory.choices.length === 0) return;
+
+    // Check if we need to add choices
+    setState(prev => {
+      if (prev.messages.length === 0) return prev;
+
+      const lastMessage = prev.messages[prev.messages.length - 1];
+
+      // Only add if the last message doesn't already have choices
+      if (lastMessage.role === 'assistant' && !lastMessage.metadata?.choices) {
+        console.log('📎 Attaching choices to last message after streaming completed', {
+          messageId: lastMessage.id,
+          choicesCount: currentStory.choices.length
+        });
+
+        return {
+          ...prev,
+          messages: [
+            ...prev.messages.slice(0, -1),
+            {
+              ...lastMessage,
+              metadata: {
+                ...lastMessage.metadata,
+                choices: currentStory.choices
+              }
+            }
+          ]
+        };
+      }
+
+      return prev;
+    });
+  }, [currentStory, currentStory?.choices, streamingState.isStreaming, state.isInitialized]);
+
   // Initialize story session and first message
   const initializeStory = useCallback(async () => {
     if (!currentStory || !currentChild || state.sessionId || state.isInitialized) return;
@@ -89,41 +147,19 @@ export const useStoryRuntime = () => {
         }
 
         // Add choices if available (only after the last chapter)
+        // NOTE: The choice question is already in the story content from the LLM
+        // We just need to attach the choices metadata to the last message
         if (currentStory.choices && currentStory.choices.length > 0) {
-          // Get the contextual question from the first choice (they all have the same question)
-          const choiceQuestion = currentStory.choices[0]?.choice_question;
-
-          // Only add a question message if we have a choice_question from the backend
-          // Otherwise, the question is already in the story content
-          if (choiceQuestion) {
-            const choiceMessage: StoryMessage = {
-              id: `choices-${Date.now()}`,
-              role: 'assistant',
-              content: [{
-                type: 'text',
-                text: choiceQuestion
-              }],
-              createdAt: new Date(Date.now() + 2000), // Add after all chapters
+          // Find the last chapter message and add choices to it
+          const lastMessageIndex = messagesToAdd.length - 1;
+          if (lastMessageIndex >= 0) {
+            messagesToAdd[lastMessageIndex] = {
+              ...messagesToAdd[lastMessageIndex],
               metadata: {
-                choices: currentStory.choices,
-                chapterNumber: currentStory.currentChapter
+                ...messagesToAdd[lastMessageIndex].metadata,
+                choices: currentStory.choices
               }
             };
-            messagesToAdd.push(choiceMessage);
-          } else {
-            // No separate question message - choices will be shown directly
-            // The question is already embedded in the story content
-            const choiceMessage: StoryMessage = {
-              id: `choices-${Date.now()}`,
-              role: 'assistant',
-              content: [], // No text content, just metadata with choices
-              createdAt: new Date(Date.now() + 2000),
-              metadata: {
-                choices: currentStory.choices,
-                chapterNumber: currentStory.currentChapter
-              }
-            };
-            messagesToAdd.push(choiceMessage);
           }
         }
       }
@@ -188,42 +224,31 @@ export const useStoryRuntime = () => {
 
   // Send choice options
   const sendChoiceOptions = useCallback((choices: Choice[]) => {
-    // Get the contextual question from the first choice (they all have the same question)
-    const choiceQuestion = choices[0]?.choice_question;
+    // NOTE: The choice question is already in the story content from the LLM
+    // We just need to attach the choices metadata to the last message
+    // Don't create a new message with the question - it would be a duplicate!
 
-    // Only add a question message if we have a choice_question from the backend
-    // Otherwise, the question is already in the story content
-    if (choiceQuestion) {
-      const choiceMessage: StoryMessage = {
-        id: `choices-${Date.now()}`,
-        role: 'assistant',
-        content: [{
-          type: 'text',
-          text: choiceQuestion
-        }],
-        createdAt: new Date(),
-        metadata: { choices, chapterNumber: currentStory?.currentChapter }
-      };
+    setState(prev => {
+      const newMessages = [...prev.messages];
+      const lastMessageIndex = newMessages.length - 1;
 
-      setState(prev => ({
+      if (lastMessageIndex >= 0) {
+        // Attach choices to the last message
+        newMessages[lastMessageIndex] = {
+          ...newMessages[lastMessageIndex],
+          metadata: {
+            ...newMessages[lastMessageIndex].metadata,
+            choices,
+            chapterNumber: currentStory?.currentChapter
+          }
+        };
+      }
+
+      return {
         ...prev,
-        messages: [...prev.messages, choiceMessage]
-      }));
-    } else {
-      // No separate question message - choices will be shown directly
-      const choiceMessage: StoryMessage = {
-        id: `choices-${Date.now()}`,
-        role: 'assistant',
-        content: [], // No text content, just metadata with choices
-        createdAt: new Date(),
-        metadata: { choices, chapterNumber: currentStory?.currentChapter }
+        messages: newMessages
       };
-
-      setState(prev => ({
-        ...prev,
-        messages: [...prev.messages, choiceMessage]
-      }));
-    }
+    });
   }, [currentStory?.currentChapter]);
 
   // Handle user choice selection

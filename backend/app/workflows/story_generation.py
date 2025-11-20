@@ -25,9 +25,23 @@ else:
 
 # Pydantic models for structured output
 class Choice(BaseModel):
-    """Model for story choices."""
-    text: str = Field(..., description="The choice text that the child will see")
-    description: str = Field("", description="Optional description providing more context about the choice")
+    """Model for story choices.
+    
+    IMPORTANT: The 'text' field should contain the actual choice action that will be displayed to the child.
+    Example correct format:
+        {"text": "Help the rabbit cross the river", "description": "This shows kindness"}
+    
+    Example WRONG format (DO NOT DO THIS):
+        {"text": "A", "description": "Help the rabbit"}  # <- Wrong! Don't use letters
+    """
+    text: str = Field(
+        ..., 
+        description="The complete choice action/option that the child will see and click on. This should be a meaningful phrase like 'Help the rabbit' or 'Explore the cave', NOT a letter like 'A' or 'B'."
+    )
+    description: str = Field(
+        "", 
+        description="Optional additional context or consequences of this choice. Can be empty."
+    )
 
 
 class StoryContent(BaseModel):
@@ -168,15 +182,12 @@ def create_story_prompt(state: StoryGenerationState) -> str:
             "Use this information to maintain perfect story continuity:"
         ])
         
-        # Add chapter summaries for context
-        chapter_summaries = []
-        for i, chapter in enumerate(state["previous_chapters"]):
-            # Create focused summary
-            summary = create_story_summary(chapter, i+1)
-            chapter_summaries.append(f"Chapter {i+1}: {summary}")
+        # Add pre-generated chapter summaries for context
+        # Summaries are generated and saved after each chapter is created
+        for chapter_summary in state["previous_chapters"]:
+            prompt_parts.append(chapter_summary)
         
-        # Add chapter summaries
-        prompt_parts.extend(chapter_summaries)
+        logger.info(f"Using {len(state['previous_chapters'])} pre-generated chapter summaries")
         
         prompt_parts.extend([
             "",
@@ -267,6 +278,15 @@ def create_story_prompt_for_structured_output(state: StoryGenerationState) -> st
         "  * Make it specific to the situation (e.g., 'How will they cross the river?')",
         "  * Avoid generic questions like 'What would you like to do?'",
         "- Provide 2-4 meaningful choices that advance the story",
+        "",
+        "CHOICE FORMAT (VERY IMPORTANT):",
+        "- Each choice.text should be a complete, meaningful action phrase",
+        "- Example CORRECT: {\"text\": \"Help the friend find their way home\", \"description\": \"\"}",
+        "- Example CORRECT: {\"text\": \"Explore the mysterious cave\", \"description\": \"This is brave\"}",
+        "- Example WRONG: {\"text\": \"A\", \"description\": \"Help the friend\"} <- DO NOT use letters!",
+        "- Example WRONG: {\"text\": \"B\", \"description\": \"Explore the cave\"} <- DO NOT use letters!",
+        "- The text field is what the child will SEE and CLICK on, so make it clear and engaging",
+        "",
         "- IMPORTANT: Write PLAIN TEXT ONLY. Do NOT use HTML tags like <p>, <br>, <div>, etc.",
         "- Output pure story text without any markup or formatting tags",
         "",
@@ -290,10 +310,12 @@ def create_story_prompt_for_structured_output(state: StoryGenerationState) -> st
             "STORY CONTEXT - What happened before:",
         ])
         
-        # Add chapter summaries for context
-        for i, chapter in enumerate(state["previous_chapters"]):
-            summary = create_story_summary(chapter, i+1)
-            prompt_parts.append(f"Chapter {i+1}: {summary}")
+        # Add pre-generated chapter summaries for context
+        # Summaries are generated and saved after each chapter is created
+        for chapter_summary in state["previous_chapters"]:
+            prompt_parts.append(chapter_summary)
+        
+        logger.info(f"Using {len(state['previous_chapters'])} pre-generated chapter summaries")
         
         prompt_parts.extend([
             "",
@@ -446,6 +468,13 @@ def generate_story_content(state: StoryGenerationState) -> Dict[str, Any]:
   "educational_elements": ["element1", "element2"],
   "vocabulary_words": ["word1", "word2"]
 }}
+
+CRITICAL RULES:
+1. The "story_content" field must contain ONLY the narrative story text that the child will read
+2. DO NOT include the choice_question in the story_content field
+3. DO NOT include the choices JSON in the story_content field
+4. The story_content should END with the story narrative, NOT with the question or choices
+5. Put the question in "choice_question" and the choices in the "choices" array SEPARATELY
 
 IMPORTANT: Output ONLY valid JSON, no other text before or after."""),
             ("user", "{prompt}")
