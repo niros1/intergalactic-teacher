@@ -209,12 +209,22 @@ class StoryService:
                 ]
 
                 logger.info(f"✅ Streaming: Found {len(previous_chapter_records)} previous chapters for context")
+                logger.info(
+                    f"\033[92mGenerating story stream XXX| story_session={story_session}, chapter_number={chapter_number}\033[0m"
+                )
 
                 # Get the most recent choice for context
+                logger.info(f"🔍 DEBUG: story_session.choices_made = {story_session.choices_made}")
+                logger.info(f"🔍 DEBUG: Choices count = {len(story_session.choices_made) if story_session.choices_made else 0}")
+                
                 if story_session.choices_made and len(story_session.choices_made) > 0:
                     last_choice_data = story_session.choices_made[-1]
+                    logger.info(f"🔍 DEBUG: last_choice_data = {last_choice_data}")
+                    
                     choice_id = last_choice_data.get("choice_id")
                     option_index = last_choice_data.get("option_index", 0)
+                    
+                    logger.info(f"🔍 DEBUG: choice_id = {choice_id}, option_index = {option_index}, type(choice_id) = {type(choice_id)}")
 
                     if choice_id == "custom-choice" and "chosen_option" in last_choice_data:
                         previous_choices = [{
@@ -223,13 +233,20 @@ class StoryService:
                         }]
                     elif choice_id and str(choice_id).isdigit():
                         choice = self.db.query(Choice).filter(Choice.id == int(choice_id)).first()
+                        logger.info(f"🔍 DEBUG: Retrieved choice from DB: {choice}")
+                        
                         if choice and choice.choices_data and option_index < len(choice.choices_data):
                             chosen_option_text = choice.choices_data[option_index].get("text", "")
+                            logger.info(f"🔍 DEBUG: chosen_option_text = '{chosen_option_text}'")
+                            
                             if chosen_option_text:
                                 previous_choices = [{
                                     "question": choice.question,
                                     "chosen_option": chosen_option_text
                                 }]
+                                logger.info(f"✅ Set previous_choices: {previous_choices}")
+                
+                logger.info(f"🎯 FINAL: previous_choices being passed to workflow = {previous_choices}")
 
             # Prepare initial state
             initial_state = StoryGenerationState(
@@ -624,6 +641,21 @@ class StoryService:
 
                 logger.info(f"📨 Sending complete event with story ID: {story.id}, choices: {len(choices_with_ids)}")
 
+                # 🔧 CRITICAL FIX: Update session progress after chapter is generated
+                if story_session:
+                    story_session.current_chapter = chapter_number
+                    # Update completion percentage
+                    story_session.completion_percentage = int((chapter_number / story.total_chapters) * 100)
+                    story_session.last_accessed = datetime.utcnow()
+                    
+                    # Check if story is completed
+                    if chapter_number >= story.total_chapters:
+                        story_session.is_completed = True
+                        story_session.completed_at = datetime.utcnow()
+                    
+                    self.db.commit()
+                    logger.info(f"✅ Updated session {story_session.id}: current_chapter={chapter_number}, completion={story_session.completion_percentage}%")
+
                 # Build final story response with REAL database ID
                 yield format_complete_event({
                     "id": str(story.id),  # Real database ID (integer)
@@ -642,7 +674,7 @@ class StoryService:
                     "safety_score": final_state.get("safety_score", 1.0),
                     "content_approved": final_state.get("content_approved", True),
                     "vocabulary_level": final_state.get("vocabulary_level", child.reading_level),
-                    "isCompleted": False,
+                    "isCompleted": chapter_number >= story.total_chapters,
                     "currentChapter": chapter_number,
                     "totalChapters": story.total_chapters,
                     "createdAt": story.created_at.isoformat()

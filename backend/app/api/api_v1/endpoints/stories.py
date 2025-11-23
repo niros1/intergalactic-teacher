@@ -797,6 +797,12 @@ async def make_story_choice_stream(
 
             # Commit the choice to database
             session_service.db.commit()
+            
+            # 🔧 CRITICAL FIX: Refresh session to get latest data from database
+            session_service.db.refresh(session)
+            
+            logger.info(f"✅ Recorded choice {choice_id} for session {session_id}")
+            logger.info(f"📝 Session choices_made: {session.choices_made}")
 
         # Check if there are more chapters available
         if session.current_chapter >= session.story.total_chapters:

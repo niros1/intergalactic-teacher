@@ -1,12 +1,16 @@
 """Story session model."""
 
+import logging
 from datetime import datetime
 from typing import Dict, List, Optional
 
 from sqlalchemy import JSON, Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.db.base import Base
+
+logger = logging.getLogger(__name__)
 
 
 class StorySession(Base):
@@ -73,6 +77,8 @@ class StorySession(Base):
     
     def add_choice(self, choice_id: int, option_index: int) -> None:
         """Add a choice to the session."""
+        logger.info(f"🔵 ADD_CHOICE: Before - session {self.id}, choices_made = {self.choices_made}")
+        
         if not self.choices_made:
             self.choices_made = []
         
@@ -82,6 +88,12 @@ class StorySession(Base):
             "timestamp": datetime.utcnow().isoformat(),
         }
         self.choices_made.append(choice_data)
+        
+        # 🔧 CRITICAL: Mark JSON field as modified so SQLAlchemy knows to persist the change
+        # Without this, appending to the list won't be detected by SQLAlchemy's change tracking
+        flag_modified(self, "choices_made")
+        
+        logger.info(f"🟢 ADD_CHOICE: After - session {self.id}, choices_made = {self.choices_made}")
     
     def calculate_engagement_rate(self) -> int:
         """Calculate engagement rate based on choices made vs available."""
